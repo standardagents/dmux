@@ -77,6 +77,10 @@ export interface DmuxSettings {
   enableAutopilotByDefault?: boolean;
   // Agent selection
   defaultAgent?: 'claude' | 'opencode' | 'codex';
+  // Slug generation provider
+  slugProvider?: 'auto' | 'openrouter' | 'claude' | 'codex';
+  // OpenRouter API key (persisted to shell config)
+  openrouterApiKey?: string;
   // Tmux hooks for event-driven updates (low CPU)
   // true = use hooks, false = use polling, undefined = not yet asked
   useTmuxHooks?: boolean;

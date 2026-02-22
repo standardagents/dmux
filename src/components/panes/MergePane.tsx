@@ -3,6 +3,7 @@ import { Box, Text, useInput, useApp } from 'ink';
 import { execSync, exec } from 'child_process';
 import CleanTextInput from '../inputs/CleanTextInput.js';
 import chalk from 'chalk';
+import { callAgent } from '../../utils/agentHarness.js';
 import { SettingsManager } from '../../utils/settingsManager.js';
 import { getPermissionFlags } from '../../utils/agentLaunch.js';
 
@@ -95,38 +96,26 @@ export default function MergePane({ pane, onComplete, onCancel, mainBranch }: Me
   };
 
   const generateCommitMessage = async (): Promise<string> => {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      return `chore: merge ${pane.slug} into ${mainBranch}`;
-    }
+    const fallback = `chore: merge ${pane.slug} into ${mainBranch}`;
 
     try {
       const diff = runCommand('git diff --staged');
       if (!diff.success) {
-        return `chore: merge ${pane.slug} into ${mainBranch}`;
+        return fallback;
       }
 
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'openai/gpt-4o-mini',
-          messages: [{
-            role: 'user',
-            content: `Generate a concise, semantic commit message for these changes. Follow conventional commits format (feat:, fix:, chore:, etc). Be specific about what changed:\n\n${diff.output.substring(0, 4000)}`
-          }],
-          max_tokens: 100,
-          temperature: 0.3,
-        }),
-      });
+      const prompt = `Generate a concise, semantic commit message for these changes. Follow conventional commits format (feat:, fix:, chore:, etc). Be specific about what changed. Respond with ONLY the commit message, nothing else:\n\n${diff.output.substring(0, 4000)}`;
 
-      const data = await response.json() as any;
-      return data.choices?.[0]?.message?.content?.trim() || `chore: merge ${pane.slug} into ${mainBranch}`;
+      const model = diff.output.length > 3000 ? 'mid' as const : 'cheap' as const;
+      const message = await callAgent(prompt, { timeout: 60000, model });
+      if (message) {
+        const cleaned = message.replace(/^["']|["']$/g, '').trim();
+        if (cleaned) return cleaned;
+      }
+
+      return fallback;
     } catch {
-      return `chore: merge ${pane.slug} into ${mainBranch}`;
+      return fallback;
     }
   };
 

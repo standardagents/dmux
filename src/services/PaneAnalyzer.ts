@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { capturePaneContent } from '../utils/paneCapture.js';
 import { LogService } from './LogService.js';
+import { callAgent } from '../utils/agentHarness.js';
 
 // State types for agent status
 export type PaneState = 'option_dialog' | 'open_prompt' | 'in_progress';
@@ -27,13 +28,6 @@ interface CacheEntry {
 }
 
 export class PaneAnalyzer {
-  private apiKey: string;
-  private modelStack: string[] = [
-    'google/gemini-2.5-flash',
-    'x-ai/grok-4-fast:free',
-    'openai/gpt-4o-mini'
-  ];
-
   // Content-hash based cache to avoid repeated API calls for identical content
   private cache = new Map<string, CacheEntry>();
   private readonly CACHE_TTL = 5000; // 5 seconds TTL
@@ -41,10 +35,6 @@ export class PaneAnalyzer {
 
   // Request deduplication - prevent multiple concurrent requests for same pane
   private pendingRequests = new Map<string, Promise<PaneAnalysis>>();
-
-  constructor() {
-    this.apiKey = process.env.OPENROUTER_API_KEY || '';
-  }
 
   /**
    * Hash content for cache key
@@ -89,97 +79,6 @@ export class PaneAnalyzer {
 
 
   /**
-   * Make a single API request to a specific model
-   */
-  private async tryModel(
-    model: string,
-    systemPrompt: string,
-    userPrompt: string,
-    maxTokens: number,
-    signal?: AbortSignal
-  ): Promise<any> {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/dmux/dmux',
-        'X-Title': 'dmux',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.1,
-        max_tokens: maxTokens,
-        response_format: { type: 'json_object' },
-      }),
-      signal
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API error (${model}): ${response.status} ${errorText}`);
-    }
-
-    return response.json();
-  }
-
-  /**
-   * Makes a request to OpenRouter API with PARALLEL model fallback
-   * Uses Promise.any to race all models - first success wins
-   *
-   * Performance improvement: Previously could take 6+ seconds if models failed sequentially.
-   * Now returns as soon as ANY model responds successfully (typically <1s).
-   */
-  private async makeRequestWithFallback(
-    systemPrompt: string,
-    userPrompt: string,
-    maxTokens: number,
-    signal?: AbortSignal
-  ): Promise<any> {
-    if (!this.apiKey) {
-      throw new Error('API key not available');
-    }
-
-    const logService = LogService.getInstance();
-
-    // Create an AbortController with timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s total timeout
-
-    // Combine external signal with our timeout
-    const combinedSignal = signal
-      ? AbortSignal.any([signal, controller.signal])
-      : controller.signal;
-
-    try {
-      // Race all models in parallel - first success wins
-      const result = await Promise.any(
-        this.modelStack.map(model =>
-          this.tryModel(model, systemPrompt, userPrompt, maxTokens, combinedSignal)
-            .then(data => {
-              logService.debug(`PaneAnalyzer: Model ${model} succeeded`, 'paneAnalyzer');
-              return data;
-            })
-        )
-      );
-
-      return result;
-    } catch (error) {
-      if (error instanceof AggregateError) {
-        // All models failed - throw the first error for context
-        throw error.errors[0] || new Error('All models in fallback stack failed');
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  /**
    * Stage 1: Determines the state of the pane
    * @param content - Captured pane content
    * @param signal - Optional abort signal
@@ -188,13 +87,7 @@ export class PaneAnalyzer {
   async determineState(content: string, signal?: AbortSignal, paneName?: string): Promise<PaneState> {
     const logService = LogService.getInstance();
 
-    if (!this.apiKey) {
-      // API key not set
-      logService.debug(`PaneAnalyzer: No API key set, defaulting to in_progress state${paneName ? ` for "${paneName}"` : ''}`, 'paneAnalyzer');
-      return 'in_progress';
-    }
-
-    const systemPrompt = `You are analyzing terminal output to determine its current state.
+    const prompt = `You are analyzing terminal output to determine its current state.
 IMPORTANT: Focus primarily on the LAST 10 LINES of the output, as that's where the current state is shown.
 
 Return a JSON object with a "state" field containing exactly one of these three values:
@@ -228,20 +121,24 @@ OPEN PROMPT - The DEFAULT state:
 CRITICAL:
 1. Check the BOTTOM 10 lines first - that's where the current state appears
 2. If you see "(esc to interrupt)" ANYWHERE = it's in_progress
-3. When uncertain, default to "open_prompt"`;
+3. When uncertain, default to "open_prompt"
+
+Analyze this terminal output and return a JSON object with the state:
+
+${content}`;
 
     try {
       logService.debug(`PaneAnalyzer: Requesting state determination${paneName ? ` for "${paneName}"` : ''}`, 'paneAnalyzer');
 
-      const data = await this.makeRequestWithFallback(
-        systemPrompt,
-        `Analyze this terminal output and return a JSON object with the state:\n\n${content}`,
-        20,
-        signal
-      );
+      const response = await callAgent(prompt, { json: true, timeout: 10000 });
 
-      const result = JSON.parse(data.choices?.[0]?.message?.content || '{}');
-      logService.debug(`PaneAnalyzer: LLM response for state determination${paneName ? ` ("${paneName}")` : ''}: ${JSON.stringify(result)}`, 'paneAnalyzer');
+      if (!response) {
+        logService.debug(`PaneAnalyzer: No agent response, defaulting to in_progress${paneName ? ` for "${paneName}"` : ''}`, 'paneAnalyzer');
+        return 'in_progress';
+      }
+
+      const result = JSON.parse(response);
+      logService.debug(`PaneAnalyzer: Agent response for state determination${paneName ? ` ("${paneName}")` : ''}: ${JSON.stringify(result)}`, 'paneAnalyzer');
 
       // Validate the state
       const state = result.state;
@@ -254,7 +151,6 @@ CRITICAL:
       return 'in_progress';
     } catch (error) {
       logService.error(`PaneAnalyzer: Failed to determine state${paneName ? ` for "${paneName}"` : ''}: ${error}`, 'paneAnalyzer', undefined, error instanceof Error ? error : undefined);
-      // Failed to determine state - throw error to be handled by caller
       throw error;
     }
   }
@@ -268,12 +164,7 @@ CRITICAL:
   async extractOptions(content: string, signal?: AbortSignal, paneName?: string): Promise<Omit<PaneAnalysis, 'state'>> {
     const logService = LogService.getInstance();
 
-    if (!this.apiKey) {
-      logService.debug(`PaneAnalyzer: No API key set, cannot extract options${paneName ? ` for "${paneName}"` : ''}`, 'paneAnalyzer');
-      return {};
-    }
-
-    const systemPrompt = `You are analyzing an option dialog in a terminal.
+    const prompt = `You are analyzing an option dialog in a terminal.
 Extract the following and return as JSON:
 1. The question being asked
 2. Each available option with:
@@ -297,7 +188,7 @@ Output: {
   "potential_harm": {"has_risk": true, "description": "Will delete all files"}
 }
 
-Input: "Select option:\n1. Create file\n2. Edit file\n3. Cancel"
+Input: "Select option:\\n1. Create file\\n2. Edit file\\n3. Cancel"
 Output: {
   "question": "Select option:",
   "options": [
@@ -315,20 +206,24 @@ Output: {
     {"action": "Reject", "keys": ["r", "R"]},
     {"action": "Edit manually", "keys": ["e", "E"]}
   ]
-}`;
+}
+
+Extract the option details from this dialog and return as JSON:
+
+${content}`;
 
     try {
       logService.debug(`PaneAnalyzer: Requesting options extraction${paneName ? ` for "${paneName}"` : ''}`, 'paneAnalyzer');
 
-      const data = await this.makeRequestWithFallback(
-        systemPrompt,
-        `Extract the option details from this dialog and return as JSON:\n\n${content}`,
-        300,
-        signal
-      );
+      const response = await callAgent(prompt, { json: true, timeout: 10000 });
 
-      const result = JSON.parse(data.choices?.[0]?.message?.content || '{}');
-      logService.debug(`PaneAnalyzer: LLM response for options extraction${paneName ? ` ("${paneName}")` : ''}: ${JSON.stringify(result)}`, 'paneAnalyzer');
+      if (!response) {
+        logService.debug(`PaneAnalyzer: No agent response for options extraction${paneName ? ` for "${paneName}"` : ''}`, 'paneAnalyzer');
+        return {};
+      }
+
+      const result = JSON.parse(response);
+      logService.debug(`PaneAnalyzer: Agent response for options extraction${paneName ? ` ("${paneName}")` : ''}: ${JSON.stringify(result)}`, 'paneAnalyzer');
 
       const parsedOptions = {
         question: result.question,
@@ -352,7 +247,6 @@ Output: {
       return parsedOptions;
     } catch (error) {
       logService.error(`PaneAnalyzer: Failed to extract options${paneName ? ` for "${paneName}"` : ''}: ${error}`, 'paneAnalyzer', undefined, error instanceof Error ? error : undefined);
-      // Failed to extract options - throw error to be handled by caller
       throw error;
     }
   }
@@ -361,11 +255,7 @@ Output: {
    * Stage 3: Extract summary when state is open_prompt (idle)
    */
   async extractSummary(content: string, signal?: AbortSignal): Promise<string | undefined> {
-    if (!this.apiKey) {
-      return undefined;
-    }
-
-    const systemPrompt = `You are analyzing terminal output from an AI coding agent (Claude Code or opencode).
+    const prompt = `You are analyzing terminal output from an AI coding agent (Claude Code or opencode).
 The agent is now idle and waiting for the next prompt.
 
 Your task: Provide a 1 paragraph or shorter summary of what the agent communicated to the user before going idle.
@@ -384,21 +274,20 @@ Examples:
 - "Build succeeded with no errors. All tests passed."
 - "Unable to find the specified file. Waiting for clarification."
 
-If there's no meaningful content or the output is unclear, return an empty summary.`;
+If there's no meaningful content or the output is unclear, return an empty summary.
+
+Extract the summary from this terminal output:
+
+${content}`;
 
     try {
-      const data = await this.makeRequestWithFallback(
-        systemPrompt,
-        `Extract the summary from this terminal output:\n\n${content}`,
-        100,
-        signal
-      );
+      const response = await callAgent(prompt, { json: true, timeout: 10000 });
 
-      const result = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+      if (!response) return undefined;
 
+      const result = JSON.parse(response);
       return result.summary || undefined;
     } catch (error) {
-      // Failed to extract summary - return undefined
       return undefined;
     }
   }

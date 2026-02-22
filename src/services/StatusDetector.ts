@@ -249,33 +249,14 @@ export class StatusDetector extends EventEmitter {
       let errorMessage = 'Analysis failed';
 
       if (error.message) {
-        // Clean up common API error patterns
-        if (error.message.includes('API error')) {
-          // Extract model name and status from API errors
-          const match = error.message.match(/API error \(([^)]+)\): (\d+)/);
-          if (match) {
-            const [, model, status] = match;
-            // Provide helpful messages for common status codes
-            if (status === '401') {
-              errorMessage = `API auth failed - check OPENROUTER_API_KEY`;
-            } else if (status === '402') {
-              errorMessage = `Insufficient credits - add credits to OpenRouter account`;
-            } else if (status === '429') {
-              errorMessage = `Rate limited - wait before retrying`;
-            } else if (status === '503') {
-              errorMessage = `API unavailable (${model})`;
-            } else {
-              errorMessage = `API error: ${status} (${model})`;
-            }
-          } else {
-            errorMessage = error.message;
-          }
-        } else if (error.message.includes('API key')) {
-          errorMessage = 'Set OPENROUTER_API_KEY env var';
-        } else if (error.message.includes('All models')) {
-          errorMessage = 'All models failed - check API key & credits';
-        } else if (error.message.includes('fetch')) {
+        if (error.message.includes('auth')) {
+          errorMessage = 'Agent authentication failed';
+        } else if (error.message.includes('unavailable') || error.message.includes('not found')) {
+          errorMessage = 'No agent available for analysis';
+        } else if (error.message.includes('fetch') || error.message.includes('network')) {
           errorMessage = 'Network error - check connection';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Agent analysis timed out';
         } else {
           errorMessage = error.message;
         }

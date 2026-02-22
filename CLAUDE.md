@@ -97,7 +97,7 @@ dmux is a sophisticated TypeScript-based tmux pane manager that creates AI-power
 │         (TypeScript/Node.js)            │
 ├─────────────────────────────────────────┤
 │           External Services             │
-│   (tmux, git, OpenRouter API)           │
+│   (tmux, git, OpenRouter API*)           │
 └─────────────────────────────────────────┘
 ```
 
@@ -108,8 +108,9 @@ dmux is a sophisticated TypeScript-based tmux pane manager that creates AI-power
 - **UI Components**: ink-text-input for text input
 - **Styling**: chalk for terminal colors
 - **Language**: TypeScript 5.x with strict mode
-- **External APIs**: OpenRouter AI (gpt-4o-mini model)
+- **AI Features**: Uses locally-installed agents (`claude --print`, `codex --quiet`) via unified agent harness; optional OpenRouter API for slug generation
 - **System Requirements**: tmux, git, and at least one agent CLI: Claude Code (`claude`), Codex (`codex`), or opencode (`opencode`)
+- **Optional**: `OPENROUTER_API_KEY` for OpenRouter slug generation
 
 ### File Structure
 
@@ -158,7 +159,7 @@ dmux is a sophisticated TypeScript-based tmux pane manager that creates AI-power
 
 - tmux 3.0+, Node.js 18+, Git 2.20+
 - At least one agent: `claude`, `codex`, or `opencode`
-- Optional: `OPENROUTER_API_KEY` for AI slug/commit generation
+- Optional: `OPENROUTER_API_KEY` for OpenRouter slug generation
 
 ### Build Commands
 
@@ -213,7 +214,7 @@ Converts natural language prompts into branch names:
 
 - Input: "fix the authentication bug in login flow"
 - Output: "fix-auth" or "auth-bug"
-- Fallback: `dmux-{timestamp}` if API unavailable
+- Fallback: `dmux-{timestamp}` if agent/API unavailable
 
 #### Commit Message Generation
 
@@ -278,9 +279,15 @@ interface DmuxPane {
 }
 ```
 
-### 3. OpenRouter Integration
+### 3. Agent Harness (`src/utils/agentHarness.ts`)
 
-- **Slug generation**: `gpt-4o-mini`, 10 tokens, fallback to timestamp
+Unified interface for calling locally-installed AI agents:
+- `callAgent(prompt, options?)` — resolves agent, builds command, returns result
+- `resolveAgent()` — finds available agent (explicit > `defaultAgent` setting > first available)
+- Supports `claude --print`, `codex --quiet` commands
+- `cheap: true` option for lightweight tasks (slug generation)
+- `json: true` option for structured responses
+- **Slug generation**: configurable via `slugProvider` setting (auto/openrouter/claude/codex)
 - **Commit messages**: Analyzes git diff, conventional commits format
 
 ### 4. CleanTextInput Component (CRITICAL)
@@ -297,7 +304,7 @@ interface DmuxPane {
 
 **PaneAnalyzer** (`src/PaneAnalyzer.ts`): LLM-based detection of agent state
 
-- Uses `x-ai/grok-4-fast:free` to analyze pane content
+- Uses local agent CLI (`callAgent`) to analyze pane content
 - States: `option_dialog`, `open_prompt`, `in_progress`
 - Key indicator: "(esc to interrupt)" = agent working
 
@@ -510,7 +517,7 @@ pnpm build     # TypeScript + frontend (vite)
 
 ### Testing Checklist
 
-- Outside/inside tmux, with/without OPENROUTER_API_KEY
+- Outside/inside tmux, with/without agent CLIs available
 - Pane cleanup, merge workflow, long prompts, rapid creation
 - Debug logging: `console.error('Debug:', variable)`
 
@@ -518,11 +525,12 @@ pnpm build     # TypeScript + frontend (vite)
 
 ### Common Issues
 
-1. **Agent not found**: Install `claude` or `opencode` CLI
-2. **API key issues**: Check `echo $OPENROUTER_API_KEY` and test with curl
-3. **Panes not appearing**: Verify tmux 3.0+, git 2.20+, write permissions
-4. **Screen artifacts**: `Ctrl+L` or `tmux refresh-client`
-5. **Merge conflicts**: Manually resolve in worktree, retry merge
+1. **Agent not found**: Install `claude`, `codex`, or `opencode` CLI
+2. **Agent CLI issues**: Ensure `claude`, `codex`, or `opencode` is installed and in PATH
+3. **OpenRouter issues**: If using OpenRouter for slugs, check `echo $OPENROUTER_API_KEY` and test with curl
+4. **Panes not appearing**: Verify tmux 3.0+, git 2.20+, write permissions
+5. **Screen artifacts**: `Ctrl+L` or `tmux refresh-client`
+6. **Merge conflicts**: Manually resolve in worktree, retry merge
 
 ### Debug Commands
 
@@ -536,7 +544,7 @@ ps aux | grep dmux                    # Running processes
 
 - **Background operations** pause during dialogs to prevent input lag
 - `execSync` blocks event loop - TUI checks dialog state before polling
-- Slug generation falls back to timestamps if API unavailable
+- Slug generation falls back to timestamps if agent/API unavailable
 
 ## Recent Updates
 

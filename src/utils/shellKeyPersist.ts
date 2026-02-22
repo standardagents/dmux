@@ -2,24 +2,6 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
-export type OpenRouterOnboardingOutcome = 'existing-env' | 'configured' | 'skip';
-
-interface OpenRouterOnboardingEntry {
-  completed: boolean;
-  completedAt: string;
-  outcome: OpenRouterOnboardingOutcome;
-  shellConfigPath?: string;
-}
-
-interface OnboardingState {
-  openRouterApiKeyOnboarding?: OpenRouterOnboardingEntry;
-  [key: string]: unknown;
-}
-
-const ONBOARDING_STATE_RELATIVE_PATH = path.join('.dmux', 'onboarding.json');
-const OPENROUTER_BLOCK_START = '# >>> dmux openrouter >>>';
-const OPENROUTER_BLOCK_END = '# <<< dmux openrouter <<<';
-
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -48,6 +30,14 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function blockMarkers(key: string): { start: string; end: string } {
+  const tag = key.toLowerCase().replace(/_/g, '-');
+  return {
+    start: `# >>> dmux ${tag} >>>`,
+    end: `# <<< dmux ${tag} <<<`,
+  };
 }
 
 export function getShellConfigCandidates(shellPath: string | undefined, homeDir: string): string[] {
@@ -89,20 +79,20 @@ export async function resolveShellConfigPath(shellPath: string | undefined, home
   return candidates[0];
 }
 
-export function buildOpenRouterExportLine(apiKey: string, shellPath?: string): string {
-  const trimmedKey = apiKey.trim();
+export function buildExportLine(key: string, value: string, shellPath?: string): string {
+  const trimmedValue = value.trim();
   if (isFishShell(shellPath)) {
-    return `set -gx OPENROUTER_API_KEY ${quoteForFish(trimmedKey)}`;
+    return `set -gx ${key} ${quoteForFish(trimmedValue)}`;
   }
-
-  return `export OPENROUTER_API_KEY=${quoteForPosix(trimmedKey)}`;
+  return `export ${key}=${quoteForPosix(trimmedValue)}`;
 }
 
-export function upsertOpenRouterKeyBlock(existingContent: string, exportLine: string): string {
+export function upsertEnvBlock(existingContent: string, key: string, exportLine: string): string {
+  const { start, end } = blockMarkers(key);
   const normalizedContent = existingContent.replace(/\r\n/g, '\n');
-  const block = `${OPENROUTER_BLOCK_START}\n${exportLine}\n${OPENROUTER_BLOCK_END}`;
+  const block = `${start}\n${exportLine}\n${end}`;
   const blockPattern = new RegExp(
-    `${escapeRegex(OPENROUTER_BLOCK_START)}[\\s\\S]*?${escapeRegex(OPENROUTER_BLOCK_END)}\\n?`,
+    `${escapeRegex(start)}[\\s\\S]*?${escapeRegex(end)}\\n?`,
     'm'
   );
 
@@ -122,8 +112,9 @@ export function upsertOpenRouterKeyBlock(existingContent: string, exportLine: st
   return `${withTrailingNewline}\n${block}\n`;
 }
 
-export async function persistOpenRouterApiKeyToShell(
-  apiKey: string,
+export async function persistEnvToShell(
+  key: string,
+  value: string,
   options?: { shellPath?: string; homeDir?: string }
 ): Promise<{ shellConfigPath: string; exportLine: string }> {
   const homeDir = options?.homeDir || process.env.HOME || os.homedir();
@@ -141,57 +132,11 @@ export async function persistOpenRouterApiKeyToShell(
     // Expected if shell config does not exist yet
   }
 
-  const exportLine = buildOpenRouterExportLine(apiKey, shellPath);
-  const updatedContent = upsertOpenRouterKeyBlock(existingContent, exportLine);
+  const exportLine = buildExportLine(key, value, shellPath);
+  const updatedContent = upsertEnvBlock(existingContent, key, exportLine);
 
   await fs.mkdir(path.dirname(shellConfigPath), { recursive: true });
   await fs.writeFile(shellConfigPath, updatedContent, 'utf-8');
 
   return { shellConfigPath, exportLine };
-}
-
-export function getOnboardingStatePath(homeDir: string): string {
-  return path.join(homeDir, ONBOARDING_STATE_RELATIVE_PATH);
-}
-
-export async function readOnboardingState(homeDir: string): Promise<OnboardingState> {
-  const statePath = getOnboardingStatePath(homeDir);
-  try {
-    const raw = await fs.readFile(statePath, 'utf-8');
-    const parsed = JSON.parse(raw) as OnboardingState;
-    if (parsed && typeof parsed === 'object') {
-      return parsed;
-    }
-  } catch {
-    // Expected if onboarding state doesn't exist yet
-  }
-
-  return {};
-}
-
-export async function hasCompletedOpenRouterOnboarding(homeDir: string): Promise<boolean> {
-  const state = await readOnboardingState(homeDir);
-  return state.openRouterApiKeyOnboarding?.completed === true;
-}
-
-export async function writeOpenRouterOnboardingState(
-  homeDir: string,
-  outcome: OpenRouterOnboardingOutcome,
-  shellConfigPath?: string
-): Promise<void> {
-  const statePath = getOnboardingStatePath(homeDir);
-  const currentState = await readOnboardingState(homeDir);
-
-  const nextState: OnboardingState = {
-    ...currentState,
-    openRouterApiKeyOnboarding: {
-      completed: true,
-      completedAt: new Date().toISOString(),
-      outcome,
-      ...(shellConfigPath ? { shellConfigPath } : {}),
-    },
-  };
-
-  await fs.mkdir(path.dirname(statePath), { recursive: true });
-  await fs.writeFile(statePath, JSON.stringify(nextState, null, 2), 'utf-8');
 }

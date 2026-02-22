@@ -21,7 +21,7 @@ import { TMUX_COLORS } from './theme/colors.js';
 import { SIDEBAR_WIDTH } from './utils/layoutManager.js';
 import { validateSystemRequirements, printValidationResults } from './utils/systemCheck.js';
 import { getUntrackedPanes } from './utils/shellPaneDetection.js';
-import { runFirstRunOnboardingIfNeeded } from './utils/onboarding.js';
+
 import { getAvailableAgents } from './utils/agentDetection.js';
 import { createPane } from './utils/paneCreation.js';
 import { SettingsManager } from './utils/settingsManager.js';
@@ -83,8 +83,14 @@ class Dmux {
     // Check for migration from old config location
     await this.migrateOldConfig();
 
-    // First-run onboarding (tmux config + OpenRouter API key)
-    await runFirstRunOnboardingIfNeeded();
+    // Inject OpenRouter API key from settings into process.env (for slug generation)
+    {
+      const startupSettings = new SettingsManager(this.projectRoot);
+      const savedApiKey = startupSettings.getSetting('openrouterApiKey');
+      if (savedApiKey && !process.env.OPENROUTER_API_KEY) {
+        process.env.OPENROUTER_API_KEY = savedApiKey;
+      }
+    }
 
     // Initialize config file if it doesn't exist
     if (!await this.fileExists(this.panesFile)) {

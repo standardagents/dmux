@@ -9,6 +9,7 @@ import {
 } from "../constants/timing.js"
 import { PaneAction } from "../actions/index.js"
 import { getMainBranch, getOrphanedWorktrees } from "../utils/git.js"
+import { persistEnvToShell } from "../utils/shellKeyPersist.js"
 import { enforceControlPaneSize } from "../utils/tmux.js"
 import { SIDEBAR_WIDTH } from "../utils/layoutManager.js"
 import { suggestCommand } from "../utils/commands.js"
@@ -379,6 +380,10 @@ export function useInputHandling(params: UseInputHandlingParams) {
           result.value,
           result.scope
         )
+        if (result.key === 'openrouterApiKey' && result.value) {
+          process.env.OPENROUTER_API_KEY = result.value as string;
+          persistEnvToShell('OPENROUTER_API_KEY', result.value as string);
+        }
         setStatusMessage(`Setting saved (${result.scope})`)
         setTimeout(() => setStatusMessage(""), STATUS_MESSAGE_DURATION_SHORT)
       }
