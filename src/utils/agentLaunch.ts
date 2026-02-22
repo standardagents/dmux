@@ -1,3 +1,9 @@
+import { TmuxService } from '../services/TmuxService.js';
+import {
+  buildPromptReadAndDeleteSnippet,
+  writePromptFile,
+} from './promptStore.js';
+
 export type AgentName = 'claude' | 'opencode' | 'codex';
 
 export interface AgentLaunchOption {
@@ -100,4 +106,107 @@ export function getPermissionFlags(
 
   // opencode currently has no equivalent permission flags for these modes.
   return '';
+}
+
+/**
+ * Launch an agent CLI inside an already-existing tmux pane.
+ *
+ * Shared by `createPane()` (new worktree panes) and `attachAgentToWorktree()`
+ * (sibling panes reusing an existing worktree).
+ */
+export async function launchAgentInPane(opts: {
+  paneId: string;
+  agent: AgentName;
+  prompt: string;
+  slug: string;
+  projectRoot: string;
+  permissionMode?: '' | 'plan' | 'acceptEdits' | 'bypassPermissions';
+}): Promise<void> {
+  const { paneId, agent, prompt, slug, projectRoot, permissionMode } = opts;
+  const tmuxService = TmuxService.getInstance();
+  const hasInitialPrompt = !!(prompt && prompt.trim());
+
+  if (agent === 'claude') {
+    const permissionFlags = getPermissionFlags('claude', permissionMode);
+    const permissionSuffix = permissionFlags ? ` ${permissionFlags}` : '';
+    let claudeCmd: string;
+    if (hasInitialPrompt) {
+      let promptFilePath: string | null = null;
+      try {
+        promptFilePath = await writePromptFile(projectRoot, slug, prompt);
+      } catch {
+        // Fall back to inline escaping if prompt file write fails
+      }
+
+      if (promptFilePath) {
+        const promptBootstrap = buildPromptReadAndDeleteSnippet(promptFilePath);
+        claudeCmd = `${promptBootstrap}; claude "$DMUX_PROMPT_CONTENT"${permissionSuffix}`;
+      } else {
+        const escapedPrompt = prompt
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"')
+          .replace(/`/g, '\\`')
+          .replace(/\$/g, '\\$');
+        claudeCmd = `claude "${escapedPrompt}"${permissionSuffix}`;
+      }
+    } else {
+      claudeCmd = `claude${permissionSuffix}`;
+    }
+    await tmuxService.sendShellCommand(paneId, claudeCmd);
+    await tmuxService.sendTmuxKeys(paneId, 'Enter');
+  } else if (agent === 'codex') {
+    const permissionFlags = getPermissionFlags('codex', permissionMode);
+    const permissionSuffix = permissionFlags ? ` ${permissionFlags}` : '';
+    let codexCmd: string;
+    if (hasInitialPrompt) {
+      let promptFilePath: string | null = null;
+      try {
+        promptFilePath = await writePromptFile(projectRoot, slug, prompt);
+      } catch {
+        // Fall back to inline escaping if prompt file write fails
+      }
+
+      if (promptFilePath) {
+        const promptBootstrap = buildPromptReadAndDeleteSnippet(promptFilePath);
+        codexCmd = `${promptBootstrap}; codex "$DMUX_PROMPT_CONTENT"${permissionSuffix}`;
+      } else {
+        const escapedPrompt = prompt
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"')
+          .replace(/`/g, '\\`')
+          .replace(/\$/g, '\\$');
+        codexCmd = `codex "${escapedPrompt}"${permissionSuffix}`;
+      }
+    } else {
+      codexCmd = `codex${permissionSuffix}`;
+    }
+    await tmuxService.sendShellCommand(paneId, codexCmd);
+    await tmuxService.sendTmuxKeys(paneId, 'Enter');
+  } else if (agent === 'opencode') {
+    let opencodeCmd: string;
+    if (hasInitialPrompt) {
+      let promptFilePath: string | null = null;
+      try {
+        promptFilePath = await writePromptFile(projectRoot, slug, prompt);
+      } catch {
+        // Fall back to inline escaping if prompt file write fails
+      }
+
+      if (promptFilePath) {
+        const promptBootstrap = buildPromptReadAndDeleteSnippet(promptFilePath);
+        opencodeCmd = `${promptBootstrap}; opencode --prompt "$DMUX_PROMPT_CONTENT"`;
+      } else {
+        const escapedPrompt = prompt
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"')
+          .replace(/`/g, '\\`')
+          .replace(/\$/g, '\\$');
+        opencodeCmd = `opencode --prompt "${escapedPrompt}"`;
+      }
+    } else {
+      opencodeCmd = 'opencode';
+    }
+    await tmuxService.sendShellCommand(paneId, opencodeCmd);
+    await tmuxService.sendTmuxKeys(paneId, 'Enter');
+  }
 }

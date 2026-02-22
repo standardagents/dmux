@@ -175,25 +175,37 @@ async function executeCloseOption(
 
       // Handle worktree cleanup based on option
       if (pane.worktreePath && (option === 'kill_and_clean' || option === 'kill_clean_branch')) {
-        const mainRepoPath = deriveProjectRootFromWorktreePath(pane.worktreePath) || paneProjectRoot;
-
-        // Trigger before_worktree_remove hook
-        await triggerHook('before_worktree_remove', paneProjectRoot, pane);
-
-        try {
-          WorktreeCleanupService.getInstance().enqueueCleanup({
-            pane,
-            paneProjectRoot,
-            mainRepoPath,
-            deleteBranch: option === 'kill_clean_branch',
-          });
-          startedBackgroundCleanup = true;
-        } catch (cleanupError) {
-          LogService.getInstance().warn(
-            `Failed to start background cleanup for pane ${pane.id}`,
+        // Check if sibling panes still share this worktree
+        // updatedPanes already excludes the current pane, so any match = active sibling
+        const siblingPanes = updatedPanes.filter(p => p.worktreePath === pane.worktreePath);
+        if (siblingPanes.length > 0) {
+          // Skip worktree/branch deletion — other panes still using it
+          LogService.getInstance().info(
+            `Skipping worktree cleanup for ${pane.slug}: ${siblingPanes.length} sibling(s) still using ${pane.worktreePath}`,
             'paneActions',
             pane.id
           );
+        } else {
+          const mainRepoPath = deriveProjectRootFromWorktreePath(pane.worktreePath) || paneProjectRoot;
+
+          // Trigger before_worktree_remove hook
+          await triggerHook('before_worktree_remove', paneProjectRoot, pane);
+
+          try {
+            WorktreeCleanupService.getInstance().enqueueCleanup({
+              pane,
+              paneProjectRoot,
+              mainRepoPath,
+              deleteBranch: option === 'kill_clean_branch',
+            });
+            startedBackgroundCleanup = true;
+          } catch (cleanupError) {
+            LogService.getInstance().warn(
+              `Failed to start background cleanup for pane ${pane.id}`,
+              'paneActions',
+              pane.id
+            );
+          }
         }
       }
 

@@ -39,6 +39,7 @@ const ShortcutsPopupApp: React.FC<ShortcutsPopupAppProps> = ({
     { key: 'j', description: 'Jump to selected pane' },
     { key: 'm', description: 'Open kebab menu for selected pane' },
     { key: 'x', description: 'Close selected pane' },
+    { key: 'a', description: 'Attach agent to selected worktree' },
     { key: 'n', description: 'Create new pane (main project)' },
     { key: 't', description: 'Create terminal pane (main project)' },
     { key: 'p', description: 'Create pane in another project' },

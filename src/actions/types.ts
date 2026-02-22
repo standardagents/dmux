@@ -106,6 +106,7 @@ export enum PaneAction {
   COPY_PATH = 'copy_path',
   OPEN_IN_EDITOR = 'open_in_editor',
   TOGGLE_AUTOPILOT = 'toggle_autopilot',
+  ATTACH_AGENT = 'attach_agent',
 }
 
 /**
@@ -208,6 +209,13 @@ export const ACTION_REGISTRY: Record<PaneAction, ActionMetadata> = {
     label: 'Toggle Autopilot',
     description: 'Enable/disable automatic option acceptance',
     icon: '🤖',
+    requires: { worktree: true },
+  },
+  [PaneAction.ATTACH_AGENT]: {
+    id: PaneAction.ATTACH_AGENT,
+    label: 'Attach Agent',
+    description: 'Attach another agent to this worktree',
+    icon: '+',
     shortcut: 'a',
     requires: { worktree: true },
   },
@@ -217,6 +225,7 @@ const HIDDEN_MENU_ACTIONS = new Set<PaneAction>([
   PaneAction.DUPLICATE,
   PaneAction.RUN_TEST,
   PaneAction.RUN_DEV,
+  PaneAction.ATTACH_AGENT,
 ]);
 
 /**

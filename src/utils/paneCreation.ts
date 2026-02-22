@@ -15,12 +15,8 @@ import { triggerHook, initializeHooksDirectory } from './hooks.js';
 import { TMUX_LAYOUT_APPLY_DELAY, TMUX_SPLIT_DELAY } from '../constants/timing.js';
 import { atomicWriteJsonSync } from './atomicWrite.js';
 import { LogService } from '../services/LogService.js';
-import { appendSlugSuffix, getPermissionFlags } from './agentLaunch.js';
+import { appendSlugSuffix, launchAgentInPane } from './agentLaunch.js';
 import { buildWorktreePaneTitle } from './paneTitle.js';
-import {
-  buildPromptReadAndDeleteSnippet,
-  writePromptFile,
-} from './promptStore.js';
 import { isValidBranchName } from './git.js';
 
 export interface CreatePaneOptions {
@@ -409,96 +405,22 @@ export async function createPane(
   }
 
   // Launch agent if specified
-  const hasInitialPrompt = !!(prompt && prompt.trim());
-
-  if (agent === 'claude') {
-    const permissionFlags = getPermissionFlags('claude', settings.permissionMode);
-    const permissionSuffix = permissionFlags ? ` ${permissionFlags}` : '';
-    let claudeCmd: string;
-    if (hasInitialPrompt) {
-      let promptFilePath: string | null = null;
-      try {
-        promptFilePath = await writePromptFile(projectRoot, slug, prompt);
-      } catch {
-        // Fall back to inline escaping if prompt file write fails
-      }
-
-      if (promptFilePath) {
-        const promptBootstrap = buildPromptReadAndDeleteSnippet(promptFilePath);
-        claudeCmd = `${promptBootstrap}; claude "$DMUX_PROMPT_CONTENT"${permissionSuffix}`;
-      } else {
-        const escapedPrompt = prompt
-          .replace(/\\/g, '\\\\')
-          .replace(/"/g, '\\"')
-          .replace(/`/g, '\\`')
-          .replace(/\$/g, '\\$');
-        claudeCmd = `claude "${escapedPrompt}"${permissionSuffix}`;
-      }
-    } else {
-      claudeCmd = `claude${permissionSuffix}`;
-    }
-    // Send the claude command (auto-quoted by sendShellCommand)
-    await tmuxService.sendShellCommand(paneInfo, claudeCmd);
-    await tmuxService.sendTmuxKeys(paneInfo, 'Enter');
+  if (agent) {
+    await launchAgentInPane({
+      paneId: paneInfo,
+      agent,
+      prompt,
+      slug,
+      projectRoot,
+      permissionMode: settings.permissionMode,
+    });
 
     // Auto-approve trust prompts for Claude (workspace trust, not edit permissions)
-    autoApproveTrustPrompt(paneInfo, prompt).catch(() => {
-      // Ignore errors in background monitoring
-    });
-  } else if (agent === 'codex') {
-    const permissionFlags = getPermissionFlags('codex', settings.permissionMode);
-    const permissionSuffix = permissionFlags ? ` ${permissionFlags}` : '';
-    let codexCmd: string;
-    if (hasInitialPrompt) {
-      let promptFilePath: string | null = null;
-      try {
-        promptFilePath = await writePromptFile(projectRoot, slug, prompt);
-      } catch {
-        // Fall back to inline escaping if prompt file write fails
-      }
-
-      if (promptFilePath) {
-        const promptBootstrap = buildPromptReadAndDeleteSnippet(promptFilePath);
-        codexCmd = `${promptBootstrap}; codex "$DMUX_PROMPT_CONTENT"${permissionSuffix}`;
-      } else {
-        const escapedPrompt = prompt
-          .replace(/\\/g, '\\\\')
-          .replace(/"/g, '\\"')
-          .replace(/`/g, '\\`')
-          .replace(/\$/g, '\\$');
-        codexCmd = `codex "${escapedPrompt}"${permissionSuffix}`;
-      }
-    } else {
-      codexCmd = `codex${permissionSuffix}`;
+    if (agent === 'claude') {
+      autoApproveTrustPrompt(paneInfo, prompt).catch(() => {
+        // Ignore errors in background monitoring
+      });
     }
-    await tmuxService.sendShellCommand(paneInfo, codexCmd);
-    await tmuxService.sendTmuxKeys(paneInfo, 'Enter');
-  } else if (agent === 'opencode') {
-    let opencodeCmd: string;
-    if (hasInitialPrompt) {
-      let promptFilePath: string | null = null;
-      try {
-        promptFilePath = await writePromptFile(projectRoot, slug, prompt);
-      } catch {
-        // Fall back to inline escaping if prompt file write fails
-      }
-
-      if (promptFilePath) {
-        const promptBootstrap = buildPromptReadAndDeleteSnippet(promptFilePath);
-        opencodeCmd = `${promptBootstrap}; opencode --prompt "$DMUX_PROMPT_CONTENT"`;
-      } else {
-        const escapedPrompt = prompt
-          .replace(/\\/g, '\\\\')
-          .replace(/"/g, '\\"')
-          .replace(/`/g, '\\`')
-          .replace(/\$/g, '\\$');
-        opencodeCmd = `opencode --prompt "${escapedPrompt}"`;
-      }
-    } else {
-      opencodeCmd = 'opencode';
-    }
-    await tmuxService.sendShellCommand(paneInfo, opencodeCmd);
-    await tmuxService.sendTmuxKeys(paneInfo, 'Enter');
   }
 
   // Keep focus on the new pane
@@ -561,7 +483,7 @@ export async function createPane(
 /**
  * Auto-approve Claude trust prompts
  */
-async function autoApproveTrustPrompt(
+export async function autoApproveTrustPrompt(
   paneInfo: string,
   prompt: string
 ): Promise<void> {

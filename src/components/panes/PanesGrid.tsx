@@ -32,6 +32,17 @@ const PanesGrid: React.FC<PanesGridProps> = memo(({
   )
   const paneGroups = actionLayout.groups
 
+  // Compute sibling count map: how many other panes share the same worktree
+  const siblingCountMap = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const pane of panes) {
+      if (!pane.worktreePath) continue
+      const count = panes.filter(p => p.worktreePath === pane.worktreePath).length - 1
+      map.set(pane.id, count)
+    }
+    return map
+  }, [panes])
+
   const actionsByProject = useMemo(() => {
     const map = new Map<string, { newAgent?: ProjectActionItem; terminal?: ProjectActionItem }>()
     for (const action of actionLayout.actionItems) {
@@ -99,6 +110,7 @@ const PanesGrid: React.FC<PanesGridProps> = memo(({
                 isFirstPane={isFirstPane}
                 isLastPane={isLastPane}
                 isNextSelected={isNextSelected}
+                siblingCount={siblingCountMap.get(pane.id) || 0}
               />
             )
           })}

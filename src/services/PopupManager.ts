@@ -405,7 +405,7 @@ export class PopupManager {
         [],
         {
           width: 50,
-          height: 21,
+          height: 22,
           title: "⌨️  Keyboard Shortcuts",
         },
         {
