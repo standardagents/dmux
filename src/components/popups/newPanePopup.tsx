@@ -22,6 +22,7 @@ import path from "path"
 
 const PROJECT_PATH_ARG = process.argv[3]
 const FILE_SCAN_ROOT = PROJECT_PATH_ARG || process.cwd()
+const PROJECT_NAME = path.basename(FILE_SCAN_ROOT)
 
 // Debug logging to file
 const DEBUG_LOG = path.join(FILE_SCAN_ROOT, '.dmux', 'file-picker-debug.log')
@@ -254,6 +255,13 @@ const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }) => {
       shouldAllowCancel={shouldAllowCancel}
     >
       <PopupContainer footer={PopupFooters.input()}>
+        {/* Project context */}
+        <Box marginBottom={0}>
+          <Text dimColor>Project: </Text>
+          <Text bold color="cyan">{PROJECT_NAME}</Text>
+          <Text dimColor>  ({FILE_SCAN_ROOT})</Text>
+        </Box>
+
         {/* Instructions */}
         <Box marginBottom={1}>
           <Text dimColor>Enter a prompt for your AI agent.</Text>

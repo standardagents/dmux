@@ -197,13 +197,15 @@ export class PopupManager {
     try {
       const popupHeight = Math.floor(this.config.terminalHeight * 0.8)
       const popupArgs = projectPath ? [projectPath] : []
+      const effectivePath = projectPath || this.config.projectRoot
+      const projectName = effectivePath ? path.basename(effectivePath) : "dmux"
       const result = await this.launchPopup<string>(
         "newPanePopup.js",
         popupArgs,
         {
           width: 90,
           height: popupHeight,
-          title: "  ✨ dmux - Create New Pane  ",
+          title: `  ✨ New Pane — ${projectName}  `,
           positioning: "centered",
         }
       )
