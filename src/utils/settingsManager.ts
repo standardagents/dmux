@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
-import type { DmuxSettings, SettingsScope, SettingDefinition } from '../types.js';
+import type { DmuxSettings, SettingsScope, EffectiveSettingsScope, SettingDefinition } from '../types.js';
 import {
   DEFAULT_MIN_PANE_WIDTH,
   DEFAULT_MAX_PANE_WIDTH,
@@ -26,6 +26,7 @@ import {
 } from './notificationSounds.js';
 
 const GLOBAL_SETTINGS_PATH = join(homedir(), '.dmux.global.json');
+const TEAM_DEFAULTS_FILENAME = '.dmux.defaults.json';
 const PERMISSION_MODES = ['', 'plan', 'acceptEdits', 'bypassPermissions'] as const;
 function isPermissionMode(value: string): value is NonNullable<DmuxSettings['permissionMode']> {
   return (PERMISSION_MODES as readonly string[]).includes(value);
@@ -181,16 +182,30 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
 export class SettingsManager {
   private globalPath: string;
   private projectPath: string;
+  private teamDefaultsPath: string;
   private globalSettings: DmuxSettings = {};
   private projectSettings: DmuxSettings = {};
+  private teamDefaults: DmuxSettings = {};
 
   constructor(projectRoot?: string) {
+    const root = projectRoot || process.cwd();
     this.globalPath = GLOBAL_SETTINGS_PATH;
-    this.projectPath = join(projectRoot || process.cwd(), '.dmux', 'settings.json');
+    this.projectPath = join(root, '.dmux', 'settings.json');
+    this.teamDefaultsPath = join(root, TEAM_DEFAULTS_FILENAME);
     this.loadSettings();
   }
 
   private loadSettings(): void {
+    // Load team defaults (committed to repo, read-only)
+    if (existsSync(this.teamDefaultsPath)) {
+      try {
+        const data = readFileSync(this.teamDefaultsPath, 'utf-8');
+        this.teamDefaults = JSON.parse(data);
+      } catch (error) {
+        console.error('Failed to load team defaults:', error);
+      }
+    }
+
     // Load global settings
     if (existsSync(this.globalPath)) {
       try {
@@ -249,11 +264,12 @@ export class SettingsManager {
   }
 
   /**
-   * Get merged settings (project settings override global)
+   * Get merged settings (project > global > team defaults > built-in defaults)
    */
   getSettings(): DmuxSettings {
     const merged = cloneSettingsArrays({
       ...DEFAULT_SETTINGS,
+      ...this.teamDefaults,
       ...this.globalSettings,
       ...this.projectSettings,
     });
@@ -526,9 +542,16 @@ export class SettingsManager {
   }
 
   /**
+   * Get team defaults (committed to repo, read-only)
+   */
+  getTeamDefaults(): DmuxSettings {
+    return cloneSettingsArrays(this.teamDefaults);
+  }
+
+  /**
    * Get the effective scope for a setting (where it's currently defined)
    */
-  getEffectiveScope(key: keyof DmuxSettings): SettingsScope | null {
+  getEffectiveScope(key: keyof DmuxSettings): EffectiveSettingsScope | null {
     if (key === 'minPaneWidth') {
       return this.globalSettings.minPaneWidth !== undefined ? 'global' : null;
     }
@@ -537,6 +560,7 @@ export class SettingsManager {
     }
     if (key in this.projectSettings) return 'project';
     if (key in this.globalSettings) return 'global';
+    if (key in this.teamDefaults) return 'team';
     return null;
   }
 }
