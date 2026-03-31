@@ -29,6 +29,7 @@ import { shouldUseQuietDevWatchExit } from './utils/devWatchExit.js';
 import { buildPaneExitedHookCommandForSession } from './utils/tmuxHookCommands.js';
 import { ensureTmuxRuntimeCompatibility } from './utils/tmuxRuntimeCompatibility.js';
 import { claimProcessShutdown } from './utils/processShutdown.js';
+import { sendTmuxShellCommand } from './utils/tmuxSendKeys.js';
 import {
   addSidebarProject,
   hasSidebarProject,
@@ -318,7 +319,7 @@ class Dmux {
           }
         }
 
-        execSync(`tmux send-keys -t ${this.sessionName} "${dmuxCommand}" Enter`, { stdio: 'inherit' });
+        sendTmuxShellCommand(this.sessionName, dmuxCommand, 'inherit');
       }
       execSync(`tmux attach-session -t ${this.sessionName}`, { stdio: 'inherit' });
       return;
