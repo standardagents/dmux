@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Box, Text, useInput, useFocus, useStdout } from 'ink';
-import { wrapText, findCursorInWrappedLines, preprocessPastedContent } from '../../utils/input.js';
+import stringWidth from 'string-width';
+import { wrapText, findCursorInWrappedLines, findCharIndexAtWidth, preprocessPastedContent } from '../../utils/input.js';
 
 interface CleanTextInputProps {
   value: string;
@@ -334,6 +335,13 @@ const CleanTextInput: React.FC<CleanTextInputProps> = ({
           absolutePos += wrapped[i]!.gapSize;
         }
       }
+      // For forced breaks (gapSize=0, not last line), cursor at lineLength
+      // would map to the next line. Stay on the last character instead.
+      const currentWrapped = wrapped[currentPos.line]!;
+      const isLastLine = currentPos.line === wrapped.length - 1;
+      if (currentWrapped.gapSize === 0 && !isLastLine && currentWrapped.line.length > 0) {
+        absolutePos -= 1;
+      }
       setCursor(Math.min(absolutePos, value.length));
       return;
     }
@@ -356,10 +364,20 @@ const CleanTextInput: React.FC<CleanTextInputProps> = ({
       const wrapped = wrapText(value, maxWidth);
       const currentPos = findCursorInWrappedLines(wrapped, cursor);
       
+      // Use display width for column tracking so mixed-width text
+      // (CJK + ASCII) maintains the correct visual column position.
+      const currentVisualCol = stringWidth(wrapped[currentPos.line]!.line.slice(0, currentPos.col));
+      
       if (key.upArrow && currentPos.line > 0) {
         // Move up one visual line
         const targetLine = currentPos.line - 1;
-        const targetCol = Math.min(currentPos.col, wrapped[targetLine]!.line.length);
+        const targetWrapped = wrapped[targetLine]!;
+        let targetCol = findCharIndexAtWidth(targetWrapped.line, currentVisualCol);
+        // Cap for forced-break lines to stay on this line
+        const isTargetLastLine = targetLine === wrapped.length - 1;
+        if (targetWrapped.gapSize === 0 && !isTargetLastLine) {
+          targetCol = Math.min(targetCol, Math.max(0, targetWrapped.line.length - 1));
+        }
         
         // Convert back to absolute position
         let absolutePos = 0;
@@ -371,7 +389,13 @@ const CleanTextInput: React.FC<CleanTextInputProps> = ({
       } else if (key.downArrow && currentPos.line < wrapped.length - 1) {
         // Move down one visual line
         const targetLine = currentPos.line + 1;
-        const targetCol = Math.min(currentPos.col, wrapped[targetLine]!.line.length);
+        const targetWrapped = wrapped[targetLine]!;
+        let targetCol = findCharIndexAtWidth(targetWrapped.line, currentVisualCol);
+        // Cap for forced-break lines to stay on this line
+        const isTargetLastLine = targetLine === wrapped.length - 1;
+        if (targetWrapped.gapSize === 0 && !isTargetLastLine) {
+          targetCol = Math.min(targetCol, Math.max(0, targetWrapped.line.length - 1));
+        }
         
         // Convert back to absolute position
         let absolutePos = 0;

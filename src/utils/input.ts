@@ -5,7 +5,7 @@ const charDisplayWidth = (char: string): number => stringWidth(char);
 
 // Find the character index where cumulative display width would exceed targetWidth.
 // Returns the number of characters that fit within targetWidth columns.
-const findCharIndexAtWidth = (str: string, targetWidth: number): number => {
+export const findCharIndexAtWidth = (str: string, targetWidth: number): number => {
   let width = 0;
   for (let i = 0; i < str.length; i++) {
     const cw = charDisplayWidth(str[i]!);
@@ -104,7 +104,14 @@ export const findCursorInWrappedLines = (
   for (let lineIndex = 0; lineIndex < wrappedLines.length; lineIndex++) {
     const wrappedLine = wrappedLines[lineIndex]!;
     const lineLength = wrappedLine.line.length;
-    if (absoluteCursor <= currentPos + lineLength) {
+    const isLastLine = lineIndex === wrappedLines.length - 1;
+    // For forced breaks (gapSize=0, not last line), cursor at the boundary
+    // belongs to the NEXT line since no gap character was consumed.
+    // For gap breaks (gapSize>0) or last line, cursor at boundary stays here.
+    const endInclusive = wrappedLine.gapSize > 0 || isLastLine;
+    if (endInclusive
+      ? absoluteCursor <= currentPos + lineLength
+      : absoluteCursor < currentPos + lineLength) {
       const colInLine = absoluteCursor - currentPos;
       return { line: lineIndex, col: Math.max(0, Math.min(colInLine, lineLength)) };
     }

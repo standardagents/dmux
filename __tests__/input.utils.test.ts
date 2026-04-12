@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { preprocessPastedContent, wrapText, findCursorInWrappedLines } from '../src/utils/input.js';
+import { preprocessPastedContent, wrapText, findCursorInWrappedLines, findCharIndexAtWidth } from '../src/utils/input.js';
 import stringWidth from 'string-width';
 
 describe('input utils: paste sanitation', () => {
@@ -143,26 +143,20 @@ describe('input utils: CJK cursor mapping', () => {
     const text = '你好世界测试';
     const wrapped = wrapText(text, 8); // "你好世界" (4 chars) | "测试" (2 chars)
     // gapSize is 0 for forced CJK break, so cursor=4 should be on line 1, col 0
+    // (the character '测' is at absolute index 4 and starts line 1)
     const pos = findCursorInWrappedLines(wrapped, 4);
-    expect(pos.line).toBe(0);
-    expect(pos.col).toBe(4);
-    // cursor=4 is at end of line 0 (after '界')
-    // cursor just past the line should go to next line
-    // With gapSize 0, character 4 ('测') starts line 1
-    // But cursor=4 <= 0+4 so it's still on line 0. Cursor 4 on line 0 is at end.
+    expect(pos.line).toBe(1);
+    expect(pos.col).toBe(0);
   });
 
   it('cursor after CJK forced break maps to start of next line', () => {
     const text = '你好世界测试';
     const wrapped = wrapText(text, 8); // "你好世界" | "测试", gapSize=0
-    // With gapSize=0, the 5th character '测' is at absolute position 4
-    // currentPos after line 0: 0 + 4 + 0 = 4
-    // cursor=4 <= 0+4, so line 0, col 4 (end of line)
-    // But we also need cursor=4 to show on line 1 col 0 since char 4 is there
-    // Actually, cursor=4 at col=4 of a 4-char line means "after last char" = end of line 0
-    // The character at index 4 starts on the next line
-    expect(wrapped[0].line.length).toBe(4);
-    expect(wrapped[1].line).toBe('测试');
+    // cursor=4 maps to line 1, col 0 ('测')
+    const pos = findCursorInWrappedLines(wrapped, 4);
+    expect(pos.line).toBe(1);
+    expect(pos.col).toBe(0);
+    expect(wrapped[1].line[0]).toBe('测');
   });
 
   it('maps cursor in mixed ASCII/CJK wrapped text', () => {
@@ -175,5 +169,107 @@ describe('input utils: CJK cursor mapping', () => {
     const pos = findCursorInWrappedLines(wrapped, 6);
     expect(pos.line).toBe(1);
     expect(pos.col).toBe(0);
+  });
+});
+
+describe('input utils: CJK forced break boundary correctness', () => {
+  it('every cursor position renders the correct character via right arrow', () => {
+    const text = '你好世界测试';
+    const wrapped = wrapText(text, 8); // "你好世界" | "测试"
+    for (let c = 0; c < text.length; c++) {
+      const pos = findCursorInWrappedLines(wrapped, c);
+      const renderedChar = wrapped[pos.line]!.line[pos.col];
+      expect(renderedChar, `cursor=${c} should be '${text[c]}' but got '${renderedChar}'`).toBe(text[c]);
+    }
+  });
+
+  it('cursor at text.length maps to end of last line', () => {
+    const text = '你好世界测试';
+    const wrapped = wrapText(text, 8);
+    const pos = findCursorInWrappedLines(wrapped, text.length);
+    expect(pos.line).toBe(wrapped.length - 1);
+    expect(pos.col).toBe(wrapped[wrapped.length - 1]!.line.length);
+  });
+
+  it('down arrow from any position on line 0 lands on line 1', () => {
+    const text = '你好世界测试文字十个'; // 10 CJK chars
+    const wrapped = wrapText(text, 8); // 4 | 4 | 2
+    expect(wrapped.length).toBe(3);
+    // From every position on line 0, pressing down should land on line 1
+    for (let col = 0; col < wrapped[0]!.line.length; col++) {
+      // Compute absolute cursor for this position on line 0
+      const absCursor = col;
+      const pos = findCursorInWrappedLines(wrapped, absCursor);
+      expect(pos.line).toBe(0);
+      // Simulate down arrow
+      const targetLine = 1;
+      let absolutePos = wrapped[0]!.line.length + wrapped[0]!.gapSize;
+      // Cap targetCol for forced-break target lines
+      let targetCol = col;
+      if (wrapped[targetLine]!.gapSize === 0 && targetLine < wrapped.length - 1) {
+        targetCol = Math.min(targetCol, wrapped[targetLine]!.line.length - 1);
+      }
+      absolutePos += targetCol;
+      const newPos = findCursorInWrappedLines(wrapped, absolutePos);
+      expect(newPos.line, `down from col=${col} should land on line 1`).toBe(1);
+    }
+  });
+
+  it('down+up returns to the same line', () => {
+    const text = '你好世界测试';
+    const wrapped = wrapText(text, 8);
+    const startCursor = 2;
+    // Down
+    const downAbs = wrapped[0]!.line.length + wrapped[0]!.gapSize + Math.min(2, wrapped[1]!.line.length);
+    const downPos = findCursorInWrappedLines(wrapped, Math.min(downAbs, text.length));
+    expect(downPos.line).toBe(1);
+    // Up
+    let upAbs = 0;
+    const upTargetCol = Math.min(downPos.col, wrapped[0]!.line.length - 1); // cap for forced break
+    upAbs += upTargetCol;
+    const upPos = findCursorInWrappedLines(wrapped, upAbs);
+    expect(upPos.line).toBe(0);
+  });
+
+  it('all characters in mixed CJK+ASCII text are reachable', () => {
+    const text = '你好世界abcdefghij测试';
+    const wrapped = wrapText(text, 10);
+    for (let c = 0; c < text.length; c++) {
+      const pos = findCursorInWrappedLines(wrapped, c);
+      const renderedChar = wrapped[pos.line]!.line[pos.col];
+      expect(renderedChar, `cursor=${c} should be '${text[c]}' but got '${renderedChar}'`).toBe(text[c]);
+    }
+  });
+
+  it('space break boundary still works correctly', () => {
+    const text = 'hello world test';
+    const wrapped = wrapText(text, 10);
+    // Every character should be reachable
+    for (let c = 0; c < text.length; c++) {
+      // Skip gap characters (spaces consumed at break points)
+      const pos = findCursorInWrappedLines(wrapped, c);
+      const line = wrapped[pos.line]!.line;
+      if (pos.col < line.length) {
+        // Character is within the line content
+        expect(line[pos.col]).toBe(text[c]);
+      }
+    }
+  });
+
+  it('hard break (newline) boundary works correctly', () => {
+    const text = '你好\n世界';
+    const wrapped = wrapText(text, 20);
+    expect(wrapped.length).toBe(2);
+    // cursor=0 -> '你', cursor=1 -> '好'
+    expect(wrapped[findCursorInWrappedLines(wrapped, 0).line]!.line[findCursorInWrappedLines(wrapped, 0).col]).toBe('你');
+    expect(wrapped[findCursorInWrappedLines(wrapped, 1).line]!.line[findCursorInWrappedLines(wrapped, 1).col]).toBe('好');
+    // cursor=2 -> newline, maps to end of line 0
+    const pos2 = findCursorInWrappedLines(wrapped, 2);
+    expect(pos2.line).toBe(0);
+    expect(pos2.col).toBe(2); // past end, cursor shows as space
+    // cursor=3 -> '世'
+    const pos3 = findCursorInWrappedLines(wrapped, 3);
+    expect(pos3.line).toBe(1);
+    expect(pos3.col).toBe(0);
   });
 });
