@@ -315,12 +315,7 @@ const CleanTextInput: React.FC<CleanTextInputProps> = ({
       // Find absolute position of start of current visual line
       let absolutePos = 0;
       for (let i = 0; i < currentPos.line; i++) {
-        absolutePos += wrapped[i].line.length;
-        if (!wrapped[i].isHardBreak && i < wrapped.length - 1) {
-          absolutePos++; // Space between wrapped segments
-        } else if (wrapped[i].isHardBreak) {
-          absolutePos++; // Newline character
-        }
+        absolutePos += wrapped[i]!.line.length + wrapped[i]!.gapSize;
       }
       setCursor(absolutePos);
       return;
@@ -334,15 +329,9 @@ const CleanTextInput: React.FC<CleanTextInputProps> = ({
       // Find absolute position of end of current visual line
       let absolutePos = 0;
       for (let i = 0; i <= currentPos.line; i++) {
-        if (i === currentPos.line) {
-          absolutePos += wrapped[i].line.length;
-        } else {
-          absolutePos += wrapped[i].line.length;
-          if (!wrapped[i].isHardBreak && i < wrapped.length - 1) {
-            absolutePos++; // Space between wrapped segments
-          } else if (wrapped[i].isHardBreak) {
-            absolutePos++; // Newline character
-          }
+        absolutePos += wrapped[i]!.line.length;
+        if (i < currentPos.line) {
+          absolutePos += wrapped[i]!.gapSize;
         }
       }
       setCursor(Math.min(absolutePos, value.length));
@@ -370,38 +359,24 @@ const CleanTextInput: React.FC<CleanTextInputProps> = ({
       if (key.upArrow && currentPos.line > 0) {
         // Move up one visual line
         const targetLine = currentPos.line - 1;
-        const targetCol = Math.min(currentPos.col, wrapped[targetLine].line.length);
+        const targetCol = Math.min(currentPos.col, wrapped[targetLine]!.line.length);
         
         // Convert back to absolute position
         let absolutePos = 0;
         for (let i = 0; i < targetLine; i++) {
-          absolutePos += wrapped[i].line.length;
-          // Add space if this was a soft wrap
-          if (!wrapped[i].isHardBreak && i < wrapped.length - 1) {
-            const nextLineExists = i + 1 < wrapped.length;
-            if (nextLineExists) absolutePos++; // Space between wrapped segments
-          } else if (wrapped[i].isHardBreak) {
-            absolutePos++; // Newline character
-          }
+          absolutePos += wrapped[i]!.line.length + wrapped[i]!.gapSize;
         }
         absolutePos += targetCol;
         setCursor(Math.min(absolutePos, value.length));
       } else if (key.downArrow && currentPos.line < wrapped.length - 1) {
         // Move down one visual line
         const targetLine = currentPos.line + 1;
-        const targetCol = Math.min(currentPos.col, wrapped[targetLine].line.length);
+        const targetCol = Math.min(currentPos.col, wrapped[targetLine]!.line.length);
         
         // Convert back to absolute position
         let absolutePos = 0;
         for (let i = 0; i < targetLine; i++) {
-          absolutePos += wrapped[i].line.length;
-          // Add space if this was a soft wrap
-          if (!wrapped[i].isHardBreak && i < wrapped.length - 1) {
-            const nextLineExists = i + 1 < wrapped.length;
-            if (nextLineExists) absolutePos++; // Space between wrapped segments
-          } else if (wrapped[i].isHardBreak) {
-            absolutePos++; // Newline character
-          }
+          absolutePos += wrapped[i]!.line.length + wrapped[i]!.gapSize;
         }
         absolutePos += targetCol;
         setCursor(Math.min(absolutePos, value.length));
