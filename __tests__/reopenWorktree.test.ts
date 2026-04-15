@@ -21,6 +21,7 @@ const setupSidebarLayoutMock = vi.hoisted(() => vi.fn(() => '%1'));
 const recalculateAndApplyLayoutMock = vi.hoisted(() => vi.fn(async () => {}));
 const getInstalledAgentsMock = vi.hoisted(() => vi.fn(async () => ['claude', 'codex']));
 const filterEnabledAgentsMock = vi.hoisted(() => vi.fn((agents: string[]) => agents));
+const destroyWelcomePaneCoordinatedMock = vi.hoisted(() => vi.fn());
 const readWorktreeMetadataMock = vi.hoisted(() => vi.fn(() => ({
   agent: 'codex',
   permissionMode: 'bypassPermissions',
@@ -92,7 +93,7 @@ vi.mock('../src/utils/atomicWrite.js', () => ({
 }));
 
 vi.mock('../src/utils/welcomePaneManager.js', () => ({
-  destroyWelcomePaneCoordinated: vi.fn(),
+  destroyWelcomePaneCoordinated: destroyWelcomePaneCoordinatedMock,
 }));
 
 describe('reopenWorktree', () => {
@@ -129,5 +130,29 @@ describe('reopenWorktree', () => {
     );
     expect(result.pane.agent).toBe('codex');
     expect(result.pane.permissionMode).toBe('bypassPermissions');
+  });
+
+  it('destroys the welcome pane even when only shell panes already exist', async () => {
+    const { reopenWorktree } = await import('../src/utils/reopenWorktree.js');
+
+    await reopenWorktree({
+      slug: 'reopen-me',
+      worktreePath: '/repo/.dmux/worktrees/reopen-me',
+      projectRoot: '/repo',
+      existingPanes: [
+        {
+          id: 'dmux-1',
+          slug: 'shell-1',
+          prompt: '',
+          paneId: '%9',
+          type: 'shell',
+          shellType: 'zsh',
+        },
+      ],
+      sessionProjectRoot: '/repo',
+      sessionConfigPath: '/repo/.dmux/dmux.config.json',
+    });
+
+    expect(destroyWelcomePaneCoordinatedMock).toHaveBeenCalledWith('/repo');
   });
 });
