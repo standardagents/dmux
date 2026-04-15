@@ -117,6 +117,8 @@ export interface DmuxSettings {
   minPaneWidth?: number;
   // Preferred maximum content pane width in characters
   maxPaneWidth?: number;
+  // Display language ('en' for English, 'ja' for Japanese)
+  language?: 'en' | 'ja';
 }
 
 export type SettingsScope = 'global' | 'project';

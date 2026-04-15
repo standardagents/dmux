@@ -9,7 +9,7 @@ import {
 import { StateManager } from "../shared/StateManager.js"
 import { LogService } from "./LogService.js"
 import { TmuxService } from "./TmuxService.js"
-import { SETTING_DEFINITIONS } from "../utils/settingsManager.js"
+import { getLocalizedSettingDefinitions } from "../utils/settingsManager.js"
 import type { DmuxPane, ProjectSettings } from "../types.js"
 import { getPaneMenuActions, type PaneMenuActionId } from "../actions/index.js"
 import { INPUT_IGNORE_DELAY } from "../constants/timing.js"
@@ -619,11 +619,11 @@ export class PopupManager {
         [],
         {
           width: settingsPopupWidth,
-          height: Math.min(25, SETTING_DEFINITIONS.length + 8),
+          height: Math.min(25, getLocalizedSettingDefinitions().length + 8),
           title: "⚙️  Settings",
         },
         {
-          settingDefinitions: SETTING_DEFINITIONS,
+          settingDefinitions: getLocalizedSettingDefinitions(),
           settings: this.config.settingsManager.getSettings(),
           globalSettings: this.config.settingsManager.getGlobalSettings(),
           projectSettings: this.config.settingsManager.getProjectSettings(),
