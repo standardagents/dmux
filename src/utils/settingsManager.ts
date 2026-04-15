@@ -55,6 +55,76 @@ function isValidMinPaneWidth(value: unknown): value is number {
   );
 }
 
+function sanitizeLoadedSettings(value: unknown): DmuxSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  const parsed = value as Record<string, unknown>;
+  const sanitized: DmuxSettings = {};
+
+  if (typeof parsed.permissionMode === 'string' && isPermissionMode(parsed.permissionMode)) {
+    sanitized.permissionMode = parsed.permissionMode;
+  }
+
+  if (typeof parsed.enableAutopilotByDefault === 'boolean') {
+    sanitized.enableAutopilotByDefault = parsed.enableAutopilotByDefault;
+  }
+
+  if (
+    typeof parsed.defaultAgent === 'string'
+    && (parsed.defaultAgent === '' || isAgentName(parsed.defaultAgent))
+  ) {
+    sanitized.defaultAgent = parsed.defaultAgent;
+  }
+
+  if (Array.isArray(parsed.enabledAgents)) {
+    sanitized.enabledAgents = parsed.enabledAgents.filter(
+      (agent): agent is AgentName => typeof agent === 'string' && isAgentName(agent)
+    );
+  }
+
+  if (Array.isArray(parsed.enabledNotificationSounds)) {
+    sanitized.enabledNotificationSounds = parsed.enabledNotificationSounds.filter(
+      (soundId): soundId is NotificationSoundId =>
+        typeof soundId === 'string' && isNotificationSoundId(soundId)
+    );
+  }
+
+  if (typeof parsed.showFooterTips === 'boolean') {
+    sanitized.showFooterTips = parsed.showFooterTips;
+  }
+
+  if (typeof parsed.colorTheme === 'string' && isDmuxThemeName(parsed.colorTheme)) {
+    sanitized.colorTheme = parsed.colorTheme;
+  }
+
+  if (typeof parsed.useTmuxHooks === 'boolean') {
+    sanitized.useTmuxHooks = parsed.useTmuxHooks;
+  }
+
+  if (typeof parsed.baseBranch === 'string' && (parsed.baseBranch === '' || isValidBranchName(parsed.baseBranch))) {
+    sanitized.baseBranch = parsed.baseBranch;
+  }
+
+  if (
+    typeof parsed.branchPrefix === 'string'
+    && (parsed.branchPrefix === '' || isValidBranchName(parsed.branchPrefix))
+  ) {
+    sanitized.branchPrefix = parsed.branchPrefix;
+  }
+
+  if (isValidMinPaneWidth(parsed.minPaneWidth)) {
+    sanitized.minPaneWidth = parsed.minPaneWidth;
+  }
+
+  if (isValidMaxPaneWidth(parsed.maxPaneWidth)) {
+    sanitized.maxPaneWidth = parsed.maxPaneWidth;
+  }
+
+  return sanitized;
+}
+
 function cloneSettingsArrays(settings: DmuxSettings): DmuxSettings {
   const cloned: DmuxSettings = { ...settings };
 
@@ -211,36 +281,24 @@ export class SettingsManager {
     this.loadSettings();
   }
 
+  private loadSettingsFile(filePath: string, label: string): DmuxSettings {
+    if (!existsSync(filePath)) {
+      return {};
+    }
+
+    try {
+      const data = readFileSync(filePath, 'utf-8');
+      return sanitizeLoadedSettings(JSON.parse(data));
+    } catch (error) {
+      console.error(`Failed to load ${label}:`, error);
+      return {};
+    }
+  }
+
   private loadSettings(): void {
-    // Load team defaults (committed to repo, read-only)
-    if (existsSync(this.teamDefaultsPath)) {
-      try {
-        const data = readFileSync(this.teamDefaultsPath, 'utf-8');
-        this.teamDefaults = JSON.parse(data);
-      } catch (error) {
-        console.error('Failed to load team defaults:', error);
-      }
-    }
-
-    // Load global settings
-    if (existsSync(this.globalPath)) {
-      try {
-        const data = readFileSync(this.globalPath, 'utf-8');
-        this.globalSettings = JSON.parse(data);
-      } catch (error) {
-        console.error('Failed to load global settings:', error);
-      }
-    }
-
-    // Load project settings
-    if (existsSync(this.projectPath)) {
-      try {
-        const data = readFileSync(this.projectPath, 'utf-8');
-        this.projectSettings = JSON.parse(data);
-      } catch (error) {
-        console.error('Failed to load project settings:', error);
-      }
-    }
+    this.teamDefaults = this.loadSettingsFile(this.teamDefaultsPath, 'team defaults');
+    this.globalSettings = this.loadSettingsFile(this.globalPath, 'global settings');
+    this.projectSettings = this.loadSettingsFile(this.projectPath, 'project settings');
   }
 
   private getValidGlobalMinPaneWidth(): number {
