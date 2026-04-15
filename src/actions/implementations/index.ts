@@ -7,6 +7,7 @@
 export { viewPane } from './viewAction.js';
 export { closePane } from './closeAction.js';
 export { mergePane } from './mergeAction.js';
+export { createPullRequest } from './createPullRequestAction.js';
 export { renamePane } from './renameAction.js';
 export { duplicatePane } from './duplicateAction.js';
 export { copyPath } from './copyPathAction.js';

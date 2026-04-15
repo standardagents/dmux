@@ -66,6 +66,9 @@ export async function executeAction(
     case 'merge':
       return actions.mergePane(pane, context, params);
 
+    case 'create_pr':
+      return actions.createPullRequest(pane, context);
+
     case 'rename':
       return actions.renamePane(pane, context);
 

@@ -106,6 +106,7 @@ export enum PaneAction {
   SET_SOURCE = 'set_source',
   CLOSE = 'close',
   MERGE = 'merge',
+  CREATE_PR = 'create_pr',
   RENAME = 'rename',
   DUPLICATE = 'duplicate',
   RUN_TEST = 'run_test',
@@ -187,6 +188,14 @@ export const ACTION_REGISTRY: Record<PaneAction, ActionMetadata> = {
     description: 'Merge worktree to main branch',
     icon: '⎇',
     shortcut: 'm',
+    requires: { worktree: true },
+  },
+  [PaneAction.CREATE_PR]: {
+    id: PaneAction.CREATE_PR,
+    label: 'Create GitHub PR',
+    description: 'Push branch and create a pull request on GitHub',
+    icon: '⇱',
+    shortcut: 'p',
     requires: { worktree: true },
   },
   [PaneAction.RENAME]: {
