@@ -3,8 +3,12 @@
  * Provides multi-language support with translation files
  */
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, readdirSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export type Locale = 'en' | 'ja';
 
@@ -23,14 +27,15 @@ class I18nManager {
 
   private loadTranslations(): void {
     try {
-      const enPath = join(__dirname, 'locales', 'en.json');
-      const jaPath = join(__dirname, 'locales', 'ja.json');
-
-      const enTranslations = JSON.parse(readFileSync(enPath, 'utf-8'));
-      const jaTranslations = JSON.parse(readFileSync(jaPath, 'utf-8'));
-
-      this.translations.set('en', enTranslations);
-      this.translations.set('ja', jaTranslations);
+      const localesDir = join(__dirname, 'locales');
+      const files = readdirSync(localesDir).filter(f => f.endsWith('.json'));
+      
+      for (const file of files) {
+        const locale = file.replace('.json', '') as Locale;
+        const filePath = join(localesDir, file);
+        const translations = JSON.parse(readFileSync(filePath, 'utf-8'));
+        this.translations.set(locale, translations);
+      }
     } catch (error) {
       console.error('Failed to load translations:', error);
     }

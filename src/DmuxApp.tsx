@@ -114,9 +114,15 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   // Settings state
   const [settingsManager] = useState(() => new SettingsManager(projectRoot))
   const { projectSettings, saveSettings } = useProjectSettings(settingsFile)
-  const settings = settingsManager.getSettings()
+  
+  // Memoize settings to avoid unnecessary recalculations
+  // Recalculate when projectSettings change
+  const settings = useMemo(() => {
+    return settingsManager.getSettings()
+  }, [settingsManager, projectSettings])
 
   // Apply i18n language setting
+  // Use a separate effect to handle language changes reactively
   useEffect(() => {
     const language = settings.language || 'en'
     setLocale(language as Locale)

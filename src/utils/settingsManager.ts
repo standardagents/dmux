@@ -24,6 +24,7 @@ import {
   isNotificationSoundId,
   type NotificationSoundId,
 } from './notificationSounds.js';
+import { t } from '../i18n/index.js';
 
 const GLOBAL_SETTINGS_PATH = join(homedir(), '.dmux.global.json');
 const PERMISSION_MODES = ['', 'plan', 'acceptEdits', 'bypassPermissions'] as const;
@@ -188,6 +189,121 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     type: 'action' as any,
   },
 ];
+
+/**
+ * Get localized setting definitions using i18n
+ * Returns a new array with translated labels and descriptions
+ */
+export function getLocalizedSettingDefinitions(): SettingDefinition[] {
+  return [
+    {
+      key: 'language',
+      label: t('settings.language'),
+      description: t('settings.languageDescription'),
+      type: 'select',
+      options: [
+        { value: 'en', label: 'English' },
+        { value: 'ja', label: '日本語' },
+      ],
+    },
+    {
+      key: 'permissionMode',
+      label: t('settings.permissionMode'),
+      description: t('settings.permissionModeDescription'),
+      type: 'select',
+      options: [
+        { value: '', label: t('settings.permissionModeDefault') },
+        { value: 'plan', label: t('settings.permissionModePlan') },
+        { value: 'acceptEdits', label: t('settings.permissionModeAcceptEdits') },
+        { value: 'bypassPermissions', label: t('settings.permissionModeBypassPermissions') },
+      ],
+    },
+    {
+      key: 'enableAutopilotByDefault',
+      label: t('settings.enableAutopilot'),
+      description: t('settings.enableAutopilotDescription'),
+      type: 'boolean',
+    },
+    {
+      key: 'defaultAgent',
+      label: t('settings.defaultAgent'),
+      description: t('settings.defaultAgentDescription'),
+      type: 'select',
+      options: [
+        { value: '', label: t('settings.defaultAgentAsk') },
+        ...AGENT_OPTIONS,
+      ],
+    },
+    {
+      key: 'enabledAgents' as any,
+      label: t('settings.enabledAgents'),
+      description: t('settings.enabledAgentsDescription'),
+      type: 'action' as any,
+    },
+    {
+      key: 'enabledNotificationSounds' as any,
+      label: t('settings.notificationSounds'),
+      description: t('settings.notificationSoundsDescription'),
+      type: 'action' as any,
+    },
+    {
+      key: 'showFooterTips',
+      label: t('settings.showFooterTips'),
+      description: t('settings.showFooterTipsDescription'),
+      type: 'boolean',
+    },
+    {
+      key: 'useTmuxHooks',
+      label: t('settings.useTmuxHooks'),
+      description: t('settings.useTmuxHooksDescription'),
+      type: 'boolean',
+    },
+    {
+      key: 'baseBranch',
+      label: t('settings.baseBranch'),
+      description: t('settings.baseBranchDescription'),
+      type: 'text',
+    },
+    {
+      key: 'branchPrefix',
+      label: t('settings.branchPrefix'),
+      description: t('settings.branchPrefixDescription'),
+      type: 'select',
+      options: [
+        { value: '', label: t('settings.noPrefix') },
+        { value: 'feat/', label: 'feat/' },
+        { value: 'fix/', label: 'fix/' },
+        { value: 'chore/', label: 'chore/' },
+      ],
+    },
+    {
+      key: 'minPaneWidth',
+      label: t('settings.minPaneWidth'),
+      description: t('settings.minPaneWidthDescription'),
+      type: 'number',
+      min: MIN_MIN_PANE_WIDTH,
+      max: MAX_MIN_PANE_WIDTH,
+      step: 1,
+      shiftStep: SHIFT_MIN_PANE_WIDTH_STEP,
+    },
+    {
+      key: 'maxPaneWidth',
+      label: t('settings.maxPaneWidth'),
+      description: t('settings.maxPaneWidthDescription'),
+      type: 'number',
+      min: MIN_MAX_PANE_WIDTH,
+      max: MAX_MAX_PANE_WIDTH,
+      step: 1,
+      shiftStep: SHIFT_MAX_PANE_WIDTH_STEP,
+    },
+    {
+      key: 'hooks' as any,
+      label: t('settings.manageHooks'),
+      description: t('settings.manageHooksDescription'),
+      type: 'action' as any,
+    },
+  ];
+}
 
 export class SettingsManager {
   private globalPath: string;
