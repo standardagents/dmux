@@ -15,6 +15,12 @@
   <a href="https://github.com/formkit/dmux/issues"><strong>Issues</strong></a>
 </p>
 
+<p align="center">
+  <strong>Language:</strong>
+  <a href="./README.md">English</a> |
+  <a href="./README.ja.md">日本語</a>
+</p>
+
 ---
 
 <img src="./dmux.webp" alt="dmux demo" width="100%" />
