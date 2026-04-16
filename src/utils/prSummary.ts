@@ -18,6 +18,32 @@ export interface BranchDiff {
 }
 
 /**
+ * List of file paths changed between target and source branch.
+ */
+export function getChangedFiles(
+  repoPath: string,
+  sourceBranch: string,
+  targetBranch: string
+): string[] {
+  try {
+    const out = execSync(
+      `git diff --name-only ${targetBranch}...${sourceBranch}`,
+      { cwd: repoPath, encoding: 'utf-8', stdio: 'pipe' }
+    );
+    return out
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  } catch (error) {
+    LogService.getInstance().warn(
+      `getChangedFiles failed for ${sourceBranch}...${targetBranch}: ${error}`,
+      'prSummary'
+    );
+    return [];
+  }
+}
+
+/**
  * Get diff and metadata between source branch and target branch (target...source)
  */
 export function getBranchDiff(

@@ -24,6 +24,7 @@ export type ActionResultType =
   | 'confirm'           // Need user confirmation (yes/no)
   | 'choice'            // Need user to select from options
   | 'input'             // Need user text input
+  | 'pr_review'         // Specialized PR review popup (editable summary + file list + diff peek)
   | 'info'              // Informational message, no action needed
   | 'progress'          // Long-running action, show progress
   | 'navigation';       // Navigate to a different view/pane
@@ -62,6 +63,15 @@ export interface ActionResult {
   defaultValue?: string;
   onSubmit?: (value: string) => Promise<ActionResult>;
   inputMaxVisibleLines?: number;  // If set, input scrolls within this many lines and popup is enlarged
+
+  // For 'pr_review' type (reuses defaultValue for initial summary text and onSubmit for the result)
+  reviewData?: {
+    repoPath: string;
+    sourceBranch: string;
+    targetBranch: string;
+    files: string[];
+    aiFailed?: boolean;
+  };
 
   // For 'progress' type
   progress?: number;      // 0-100, or undefined for indeterminate

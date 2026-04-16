@@ -942,6 +942,45 @@ export class PopupManager {
     }
   }
 
+  async launchPRReviewPopup(
+    data: {
+      title: string
+      message: string
+      defaultValue: string
+      repoPath: string
+      sourceBranch: string
+      targetBranch: string
+      files: string[]
+      aiFailed?: boolean
+    },
+    projectRoot?: string
+  ): Promise<string | null> {
+    if (!this.checkPopupSupport()) return null
+
+    try {
+      const sidebar = this.config.sidebarWidth
+      const width = Math.max(80, Math.min(130, this.config.terminalWidth - sidebar - 2))
+      const height = Math.max(24, Math.min(50, this.config.terminalHeight - 2))
+
+      const result = await this.launchPopup<string>(
+        "prReviewPopup.js",
+        [],
+        {
+          width,
+          height,
+          title: data.title || "Pull Request",
+        },
+        data,
+        projectRoot
+      )
+
+      return this.handleResult(result)
+    } catch (error: any) {
+      this.showTempMessage(`Failed to launch popup: ${error.message}`)
+      return null
+    }
+  }
+
   async launchInputPopup(
     title: string,
     message: string,

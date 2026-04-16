@@ -11,6 +11,8 @@ const mocked = vi.hoisted(() => ({
   resolveMergeTarget: vi.fn(),
   handleCommitWithOptions: vi.fn(),
   createGitHubPullRequest: vi.fn(),
+  generatePRSummary: vi.fn(),
+  getChangedFiles: vi.fn(),
 }));
 
 vi.mock('../../src/utils/mergeValidation.js', () => ({
@@ -29,6 +31,17 @@ vi.mock('../../src/actions/merge/commitMessageHandler.js', () => ({
 vi.mock('../../src/utils/githubPullRequest.js', () => ({
   createGitHubPullRequest: mocked.createGitHubPullRequest,
 }));
+
+vi.mock('../../src/utils/prSummary.js', async () => {
+  const actual = await vi.importActual<typeof import('../../src/utils/prSummary.js')>(
+    '../../src/utils/prSummary.js'
+  );
+  return {
+    ...actual,
+    generatePRSummary: mocked.generatePRSummary,
+    getChangedFiles: mocked.getChangedFiles,
+  };
+});
 
 describe('createPullRequestAction', () => {
   const mergeTarget = {
@@ -62,6 +75,11 @@ describe('createPullRequestAction', () => {
       created: true,
       remoteName: 'origin',
     });
+    mocked.generatePRSummary.mockResolvedValue({
+      title: 'feat: review queue',
+      body: '## Summary\n- improves review flow',
+    });
+    mocked.getChangedFiles.mockReturnValue(['src/app.ts', 'README.md']);
   });
 
   it('returns an error for panes without a worktree', async () => {
@@ -136,18 +154,43 @@ describe('createPullRequestAction', () => {
     expect(result.message).toContain('"main"');
   });
 
-  it('creates a PR when the confirmation is accepted', async () => {
+  it('opens the PR review popup with the AI-generated summary when confirmed', async () => {
     const pane = createWorktreePane({ branchName: 'feature/review-queue' });
     const context = createMockContext([pane]);
     const result = await createPullRequest(pane, context);
 
-    const submitResult = await result.onConfirm?.();
+    const reviewResult = await result.onConfirm?.();
+
+    expect(reviewResult?.type).toBe('pr_review');
+    expect(reviewResult?.defaultValue).toBe(
+      'feat: review queue\n\n## Summary\n- improves review flow'
+    );
+    expect(reviewResult?.reviewData).toMatchObject({
+      repoPath: pane.worktreePath,
+      sourceBranch: 'feature/review-queue',
+      targetBranch: 'main',
+      files: ['src/app.ts', 'README.md'],
+      aiFailed: false,
+    });
+  });
+
+  it('creates the PR with the reviewed title/body when the user submits', async () => {
+    const pane = createWorktreePane({ branchName: 'feature/review-queue' });
+    const context = createMockContext([pane]);
+    const result = await createPullRequest(pane, context);
+    const reviewResult = await result.onConfirm?.();
+
+    const submitResult = await reviewResult?.onSubmit?.(
+      'feat: final title\n\ndescription body'
+    );
 
     expectSuccess(submitResult!, 'Created PR');
     expect(mocked.createGitHubPullRequest).toHaveBeenCalledWith({
       repoPath: pane.worktreePath,
       sourceBranch: 'feature/review-queue',
       targetBranch: 'main',
+      title: 'feat: final title',
+      body: 'description body',
     });
   });
 
@@ -161,9 +204,25 @@ describe('createPullRequestAction', () => {
     });
 
     const result = await createPullRequest(pane, context);
-    const submitResult = await result.onConfirm?.();
+    const reviewResult = await result.onConfirm?.();
+    const submitResult = await reviewResult?.onSubmit?.(
+      'feat: x\n\nbody'
+    );
 
     expectSuccess(submitResult!, 'PR already exists');
+  });
+
+  it('falls back to a review popup with no default when AI generation fails', async () => {
+    const pane = createWorktreePane();
+    const context = createMockContext([pane]);
+    mocked.generatePRSummary.mockResolvedValue(null);
+
+    const result = await createPullRequest(pane, context);
+    const reviewResult = await result.onConfirm?.();
+
+    expect(reviewResult?.type).toBe('pr_review');
+    expect(reviewResult?.defaultValue).toBe('');
+    expect(reviewResult?.reviewData).toMatchObject({ aiFailed: true });
   });
 
   it('returns an error result when GitHub PR creation fails', async () => {
@@ -174,9 +233,23 @@ describe('createPullRequestAction', () => {
     });
 
     const result = await createPullRequest(pane, context);
-    const submitResult = await result.onConfirm?.();
+    const reviewResult = await result.onConfirm?.();
+    const submitResult = await reviewResult?.onSubmit?.(
+      'feat: x\n\nbody'
+    );
 
     expectError(submitResult!, 'GitHub CLI auth failed');
+  });
+
+  it('rejects submissions with an empty title', async () => {
+    const pane = createWorktreePane();
+    const context = createMockContext([pane]);
+    const result = await createPullRequest(pane, context);
+    const reviewResult = await result.onConfirm?.();
+
+    const submitResult = await reviewResult?.onSubmit?.('   ');
+
+    expectError(submitResult!, 'title cannot be empty');
   });
 
   it('uses a fallback confirmation when the original PR target is unavailable', async () => {

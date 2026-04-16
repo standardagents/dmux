@@ -97,7 +97,7 @@ const FooterHelp: React.FC<FooterHelpProps> = memo(({
   const hasNotifications = currentToast !== null || toastQueueLength > 0;
 
   return (
-    <Box marginTop={1} flexDirection="column">
+    <Box flexDirection="column">
       {/* Toast notification section - show header even when transitioning between toasts */}
       {hasNotifications ? (
         <Box height={toastHeight} marginBottom={1} flexDirection="column">

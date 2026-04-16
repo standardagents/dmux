@@ -11,7 +11,7 @@ import { createGitHubPullRequest } from '../../utils/githubPullRequest.js';
 import { getPaneDisplayName } from '../../utils/paneTitle.js';
 import {
   generatePRSummary,
-  getBranchDiff,
+  getChangedFiles,
   formatPRSummary,
   parsePRSummary,
 } from '../../utils/prSummary.js';
@@ -228,28 +228,27 @@ export async function createPullRequest(
     }
   };
 
-  const buildSummaryReviewInput = (
+  const buildReviewResult = (
     defaultValue: string,
-    diffSummary: string,
+    files: string[],
     aiFailed: boolean
   ): ActionResult => {
-    const header = aiFailed
-      ? '⚠️ AI summary generation failed. Write a title (first line), blank line, then markdown body.'
-      : 'Review the AI-generated PR summary. First line is the title; blank line; then body.';
-    const trimmedDiffSummary = diffSummary.trim();
-    const diffSummaryLines = trimmedDiffSummary ? trimmedDiffSummary.split('\n') : [];
-    const filesPreview = diffSummaryLines.length > 4
-      ? [...diffSummaryLines.slice(0, 3), `…and ${diffSummaryLines.length - 3} more`].join('\n')
-      : trimmedDiffSummary;
-    const filesNote = filesPreview ? `\n\nFiles changed:\n${filesPreview}` : '';
+    const message = aiFailed
+      ? '⚠️ AI summary failed. Edit title (first line), blank line, then markdown body.'
+      : 'Review the AI-generated summary. First line is the title; blank line; then body.';
 
     return {
-      type: 'input',
-      title: 'PR Title & Description',
-      message: `${header}${filesNote}`,
-      placeholder: 'feat: short title\n\n## Summary\n- ...',
+      type: 'pr_review',
+      title: `PR into ${mergeTarget.targetLabel}`,
+      message,
       defaultValue,
-      inputMaxVisibleLines: 14,
+      reviewData: {
+        repoPath: pane.worktreePath!,
+        sourceBranch,
+        targetBranch: mergeTarget.targetBranch,
+        files,
+        aiFailed,
+      },
       onSubmit: async (value: string) => {
         const { title, body } = parsePRSummary(value);
         if (!title) {
@@ -267,6 +266,11 @@ export async function createPullRequest(
 
   const submitPullRequest = async (): Promise<ActionResult> => {
     try {
+      const files = getChangedFiles(
+        pane.worktreePath!,
+        sourceBranch,
+        mergeTarget.targetBranch
+      );
       const generated = await generatePRSummary(
         pane.worktreePath!,
         sourceBranch,
@@ -274,19 +278,14 @@ export async function createPullRequest(
       );
 
       if (generated) {
-        const { summary } = getBranchDiff(
-          pane.worktreePath!,
-          sourceBranch,
-          mergeTarget.targetBranch
-        );
-        return buildSummaryReviewInput(formatPRSummary(generated), summary, false);
+        return buildReviewResult(formatPRSummary(generated), files, false);
       }
 
       LogService.getInstance().warn(
-        'AI PR summary generation returned null; falling back to --fill',
+        'AI PR summary generation returned null; showing review popup with empty default',
         'createPullRequestAction'
       );
-      return submitWithSummary(undefined, undefined);
+      return buildReviewResult('', files, true);
     } catch (error) {
       LogService.getInstance().error(
         `AI PR summary generation error: ${error}`,
@@ -294,7 +293,12 @@ export async function createPullRequest(
         undefined,
         error instanceof Error ? error : undefined
       );
-      return submitWithSummary(undefined, undefined);
+      const files = getChangedFiles(
+        pane.worktreePath!,
+        sourceBranch,
+        mergeTarget.targetBranch
+      );
+      return buildReviewResult('', files, true);
     }
   };
 

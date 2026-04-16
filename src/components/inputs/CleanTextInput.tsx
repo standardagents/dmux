@@ -17,6 +17,7 @@ interface CleanTextInputProps {
   disableEscape?: boolean; // Disable ESC key (for external controls)
   ignoreFocus?: boolean; // Always accept input regardless of focus state
   onCancel?: () => void; // Callback when Ctrl+C is pressed with empty input
+  disabled?: boolean; // Fully ignore input (parent handles all keystrokes)
 }
 
 interface PastedContent {
@@ -39,7 +40,8 @@ const CleanTextInput: React.FC<CleanTextInputProps> = ({
   onCursorChange,
   disableEscape = false,
   ignoreFocus = false,
-  onCancel
+  onCancel,
+  disabled = false
 }) => {
   // Use id to maintain focus even when other components mount/unmount
   const { isFocused } = useFocus({ autoFocus: true, id: 'clean-text-input' });
@@ -248,7 +250,16 @@ const CleanTextInput: React.FC<CleanTextInputProps> = ({
   };
 
   useInput((input, key) => {
+    if (disabled) {
+      return;
+    }
+
     if (!isFocused && !ignoreFocus) {
+      return;
+    }
+
+    // Let parent handle Tab navigation between focus zones.
+    if (key.tab) {
       return;
     }
 
