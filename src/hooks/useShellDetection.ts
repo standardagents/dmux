@@ -1,7 +1,9 @@
 import fs from 'fs/promises';
+import path from 'path';
 import type { DmuxPane } from '../types.js';
 import { getUntrackedPanes, createShellPane, getNextDmuxId } from '../utils/shellPaneDetection.js';
 import { LogService } from '../services/LogService.js';
+import { syncPaneColorThemes } from '../utils/paneColors.js';
 
 /**
  * Detects untracked panes (manually created via tmux commands)
@@ -21,12 +23,16 @@ export async function detectAndAddShellPanes(
     // Get controlPaneId and welcomePaneId from config
     let controlPaneId: string | undefined;
     let welcomePaneId: string | undefined;
+    let projectRoot = path.dirname(path.dirname(panesFile));
+    let sidebarProjects: import('../types.js').SidebarProject[] = [];
 
     try {
       const configContent = await fs.readFile(panesFile, 'utf-8');
       const config = JSON.parse(configContent);
       controlPaneId = config.controlPaneId;
       welcomePaneId = config.welcomePaneId;
+      projectRoot = config.projectRoot || projectRoot;
+      sidebarProjects = Array.isArray(config.sidebarProjects) ? config.sidebarProjects : [];
     } catch (error) {
       // Config not available (expected on first run), continue without filtering
   //       LogService.getInstance().debug(
@@ -59,7 +65,9 @@ export async function detectAndAddShellPanes(
 
     for (const paneInfo of untrackedPanes) {
       const shellPane = await createShellPane(paneInfo.paneId, nextId, paneInfo.title);
-      newShellPanes.push(shellPane);
+      newShellPanes.push(
+        syncPaneColorThemes([shellPane], sidebarProjects, projectRoot)[0]
+      );
       nextId++;
     }
 

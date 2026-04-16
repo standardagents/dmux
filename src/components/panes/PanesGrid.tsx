@@ -1,10 +1,18 @@
 import React, { memo, useMemo } from "react"
 import { Box, Text } from "ink"
 import stringWidth from "string-width"
-import type { DmuxPane, SidebarProject } from "../../types.js"
+import type {
+  DmuxPane,
+  DmuxThemeName,
+  SidebarProject,
+} from "../../types.js"
 import type { AgentStatusMap } from "../../hooks/useAgentStatus.js"
 import PaneCard from "./PaneCard.js"
 import { COLORS } from "../../theme/colors.js"
+import {
+  getDmuxThemeAccent,
+  getDmuxThemeActiveBorderHex,
+} from "../../theme/colors.js"
 import Spinner from "../indicators/Spinner.js"
 import {
   buildProjectActionLayout,
@@ -15,8 +23,10 @@ import { isActiveDevSourcePath } from "../../utils/devSource.js"
 interface PanesGridProps {
   panes: DmuxPane[]
   selectedIndex: number
+  activeProjectRoot?: string
   isLoading: boolean
   themeName: string
+  projectThemeByRoot: Map<string, DmuxThemeName>
   agentStatuses?: AgentStatusMap
   activeDevSourcePath?: string
   sidebarProjects: SidebarProject[]
@@ -31,8 +41,10 @@ const HEADER_WIDTH = 40
 const PanesGrid: React.FC<PanesGridProps> = memo(({
   panes,
   selectedIndex,
+  activeProjectRoot: activeProjectRootProp,
   isLoading,
   themeName,
+  projectThemeByRoot,
   agentStatuses,
   activeDevSourcePath,
   sidebarProjects,
@@ -76,6 +88,10 @@ const PanesGrid: React.FC<PanesGridProps> = memo(({
 
   // Determine which project group the current selection belongs to
   const activeProjectRoot = useMemo(() => {
+    if (activeProjectRootProp) {
+      return activeProjectRootProp
+    }
+
     // Check if selection is a pane
     const selectedPane = selectedIndex < panes.length ? panes[selectedIndex] : undefined
     if (selectedPane) {
@@ -85,18 +101,25 @@ const PanesGrid: React.FC<PanesGridProps> = memo(({
     // Check if selection is an action item
     const selectedAction = actionLayout.actionItems.find(a => a.index === selectedIndex)
     return selectedAction?.projectRoot
-  }, [selectedIndex, panes, paneGroups, actionLayout.actionItems])
+  }, [activeProjectRootProp, selectedIndex, panes, paneGroups, actionLayout.actionItems])
+
+  const getProjectThemeName = (projectRoot: string): DmuxThemeName =>
+    projectThemeByRoot.get(projectRoot)
+    || themeName as DmuxThemeName
 
   const renderActionRow = (
     actions: ProjectActionItem[],
     selIdx: number,
     isActiveGroup: boolean
   ) => {
+    const actionThemeName = getProjectThemeName(actions[0]?.projectRoot || fallbackProjectRoot)
+    const actionAccent = getDmuxThemeAccent(actionThemeName)
+
     const renderLabel = (action: ProjectActionItem) => {
       const isSelected = selIdx === action.index
       const showHotkey = isActiveGroup && !!action.hotkey
       const baseColor = action.kind === "remove-project" ? "red" : COLORS.border
-      const color = isSelected ? COLORS.selected : baseColor
+      const color = isSelected ? actionAccent : baseColor
 
       if (action.kind === "new-agent") {
         return showHotkey
@@ -133,7 +156,8 @@ const PanesGrid: React.FC<PanesGridProps> = memo(({
         <Box key={group.projectRoot} flexDirection="column">
           {(() => {
             const isActive = activeProjectRoot === group.projectRoot
-            const color = isActive ? COLORS.selected : COLORS.border
+            const groupThemeName = getProjectThemeName(group.projectRoot)
+            const accentColor = getDmuxThemeAccent(groupThemeName)
             const busy = isProjectBusy?.(group.projectRoot) ?? false
             const spinnerWidth = busy ? 2 : 0
             const nameSection = `⣿⣿ ${group.projectName} `
@@ -142,21 +166,25 @@ const PanesGrid: React.FC<PanesGridProps> = memo(({
               HEADER_WIDTH - stringWidth(nameSection) - spinnerWidth
             )
             const fill = "⣿".repeat(remaining)
+            const fillColor = isActive ? accentColor : COLORS.border
+            const titleColor = isActive
+              ? getDmuxThemeActiveBorderHex(groupThemeName)
+              : COLORS.border
             return (
-              <Text color={color}>
-                <Text dimColor>⣿⣿</Text>
-                <Text> {group.projectName} </Text>
+              <Text>
+                <Text color={accentColor}>⣿⣿</Text>
+                <Text color={titleColor} dimColor={!isActive}> {group.projectName} </Text>
                 {busy && (
                   <>
                     <Spinner
-                      color={isActive ? COLORS.selected : COLORS.accent}
+                      color={accentColor}
                       frames={PROJECT_BUSY_FRAMES}
                       interval={70}
                     />
                     <Text> </Text>
                   </>
                 )}
-                <Text dimColor>{fill}</Text>
+                <Text color={fillColor} dimColor={!isActive}>{fill}</Text>
               </Text>
             )
           })()}
@@ -182,6 +210,7 @@ const PanesGrid: React.FC<PanesGridProps> = memo(({
                 isDevSource={isDevSource}
                 selected={isSelected}
                 themeName={themeName}
+                projectThemeName={getProjectThemeName(group.projectRoot)}
               />
             )
           })}

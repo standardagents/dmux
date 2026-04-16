@@ -34,3 +34,20 @@ export function buildPaneExitedHookCommandForSession(
 
   return `run-shell "DMUX_RECOVERY_SESSION_B64=${encodedSessionName} DMUX_RECOVERY_EXITED_PANE=#{hook_pane} node \\"${escapedScriptPath}\\" >/dev/null 2>&1; kill -USR2 ${pid} 2>/dev/null || true # dmux-hook"`;
 }
+
+/**
+ * Builds an after-select-pane hook that copies the focused pane's cached border
+ * style onto the session immediately. This stays inside tmux so focus changes
+ * do not need to wait on a shell subprocess before the active border updates.
+ */
+export function buildPaneFocusHookCommandForSession(
+  sessionName: string,
+  pid?: number
+): string {
+  const escapedSessionName = escapeForDoubleQuotes(sessionName);
+  const notifyController = typeof pid === 'number'
+    ? `; run-shell -b "kill -USR2 ${pid} 2>/dev/null || true # dmux-hook"`
+    : '';
+
+  return `if-shell -F "#{!=:#{@dmux_active_border_style},}" "set-option -F -t \\"${escapedSessionName}\\" pane-active-border-style \\"#{@dmux_active_border_style}\\""${notifyController}`;
+}

@@ -18,6 +18,7 @@ import { recalculateAndApplyLayout } from './layoutManager.js';
 import { buildWorktreePaneTitle } from './paneTitle.js';
 import { SettingsManager } from './settingsManager.js';
 import { LogService } from '../services/LogService.js';
+import { resolveProjectColorTheme } from './paneColors.js';
 
 export interface AttachAgentOptions {
   targetPane: DmuxPane;
@@ -164,6 +165,7 @@ export async function attachAgentToWorktree(
     paneId: paneInfo,
     projectRoot,
     projectName: targetPane.projectName,
+    colorTheme: targetPane.colorTheme || resolveProjectColorTheme(projectRoot, []),
     worktreePath: targetPane.worktreePath,
     agent,
     permissionMode: settings.permissionMode,

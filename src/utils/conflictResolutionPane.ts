@@ -32,6 +32,7 @@ import {
   type AgentName,
 } from './agentLaunch.js';
 import { sendPromptViaTmux } from './agentPromptDispatch.js';
+import { resolveProjectColorTheme } from './paneColors.js';
 
 export interface ConflictResolutionPaneOptions {
   sourceBranch: string;      // Branch being merged (the worktree branch)
@@ -209,6 +210,9 @@ export async function createConflictResolutionPane(
     slug,
     prompt,
     paneId: paneInfo,
+    projectRoot: targetRepoPath,
+    projectName,
+    colorTheme: resolveProjectColorTheme(targetRepoPath, []),
     agent,
     // Note: No worktreePath - this pane operates directly in the target repo
   };

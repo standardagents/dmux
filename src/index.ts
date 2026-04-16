@@ -29,15 +29,21 @@ import { runFirstRunOnboardingIfNeeded } from './utils/onboarding.js';
 import { atomicWriteJson } from './utils/atomicWrite.js';
 import { buildDevWatchCommand, buildDevWatchRespawnCommand } from './utils/devWatchCommand.js';
 import { shouldUseQuietDevWatchExit } from './utils/devWatchExit.js';
-import { buildPaneExitedHookCommandForSession } from './utils/tmuxHookCommands.js';
+import {
+  buildPaneExitedHookCommandForSession,
+  buildPaneFocusHookCommandForSession,
+} from './utils/tmuxHookCommands.js';
 import { ensureTmuxRuntimeCompatibility } from './utils/tmuxRuntimeCompatibility.js';
 import { claimProcessShutdown } from './utils/processShutdown.js';
 import { sendTmuxShellCommand } from './utils/tmuxSendKeys.js';
 import {
   addSidebarProject,
+  getAutoSidebarProjectColorTheme,
+  getSidebarProjectColorTheme,
   hasSidebarProject,
   normalizeSidebarProjects,
 } from './utils/sidebarProjects.js';
+import { SettingsManager } from './utils/settingsManager.js';
 import {
   buildRemotePaneActionBindingCommands,
   buildRemotePaneActionCleanupCommands,
@@ -57,6 +63,10 @@ import {
   type AgentName,
 } from './utils/agentLaunch.js';
 import { TMUX_PANE_TITLE_DISPLAY_FORMAT } from './utils/paneTitle.js';
+import {
+  TMUX_PANE_TITLE_LABEL_FORMAT,
+  TMUX_PANE_TITLE_PREFIX_FORMAT,
+} from './utils/paneTitlePrefix.js';
 import type { DmuxConfig, DmuxPane } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -257,6 +267,7 @@ class Dmux {
     if (inTmux) {
       this.setupResizeHook(sessionNameForCurrentTmux);
       this.setupPaneSplitHook(sessionNameForCurrentTmux);
+      this.setupPaneFocusHook(sessionNameForCurrentTmux);
     }
 
     if (!inTmux) {
@@ -992,6 +1003,16 @@ class Dmux {
       latestConfig.sidebarProjects = addSidebarProject(normalizedProjects, {
         projectName: this.projectName,
         projectRoot: this.projectRoot,
+        colorTheme: getAutoSidebarProjectColorTheme(
+          normalizedProjects,
+          {
+            projectRoot: this.projectRoot,
+          },
+          (targetProjectRoot) =>
+            getSidebarProjectColorTheme(normalizedProjects, targetProjectRoot)
+            || new SettingsManager(targetProjectRoot).getSettings().colorTheme
+        ),
+        colorThemeSource: 'auto',
       });
       latestConfig.lastUpdated = new Date().toISOString();
       await atomicWriteJson(context.sessionConfigPath, latestConfig);
@@ -1261,7 +1282,7 @@ class Dmux {
   private applySessionPaneBorderOptions(sessionName: string, stdio: 'pipe' | 'inherit' = 'pipe') {
     const sessionOptions = [
       `set-option -t ${sessionName} pane-border-status top`,
-      `set-option -t ${sessionName} pane-border-format " #{?@dmux_attention,#[bold]![ready] #[default],}${TMUX_PANE_TITLE_DISPLAY_FORMAT} "`,
+      `set-option -t ${sessionName} pane-border-format " #{?@dmux_attention,#[bold]![ready] #[default],}${TMUX_PANE_TITLE_PREFIX_FORMAT}${TMUX_PANE_TITLE_LABEL_FORMAT} "`,
     ].join(' \\; ');
 
     execSync(`tmux ${sessionOptions}`, { stdio });
@@ -1300,6 +1321,22 @@ class Dmux {
     }
   }
 
+  private setupPaneFocusHook(sessionName: string = this.sessionName) {
+    try {
+      const pid = process.pid;
+      const paneFocusHookCommand = buildPaneFocusHookCommandForSession(
+        sessionName,
+        pid
+      );
+      execSync(
+        `tmux set-hook -t '${sessionName}' after-select-pane '${paneFocusHookCommand}'`,
+        { stdio: 'pipe' }
+      );
+    } catch (error) {
+      LogService.getInstance().warn('Failed to set up pane focus hook', 'Setup');
+    }
+  }
+
   private cleanupResizeHook(sessionName: string = this.getCurrentTmuxSessionName() || this.sessionName) {
     try {
       // Remove session-specific hook
@@ -1321,6 +1358,15 @@ class Dmux {
     }
   }
 
+  private cleanupPaneFocusHook(sessionName: string = this.getCurrentTmuxSessionName() || this.sessionName) {
+    try {
+      execSync(`tmux set-hook -u -t '${sessionName}' after-select-pane`, { stdio: 'pipe' });
+      LogService.getInstance().debug('Cleaned up pane focus hook', 'Setup');
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+
   private setupGlobalSignalHandlers() {
     let isCleaningUp = false;
 
@@ -1337,6 +1383,7 @@ class Dmux {
       if (process.env.TMUX) {
         this.cleanupResizeHook();
         this.cleanupPaneSplitHook();
+        this.cleanupPaneFocusHook();
         this.clearRemotePaneModeIndicators();
         this.cleanupRemotePaneActionBindings();
         this.cleanupSessionRuntimeMetadata();

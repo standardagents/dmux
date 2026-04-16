@@ -10,7 +10,10 @@
 
 import { EventEmitter } from 'events';
 import { execAsync } from '../utils/execAsync.js';
-import { buildPaneExitedHookCommandForSession } from '../utils/tmuxHookCommands.js';
+import {
+  buildPaneExitedHookCommandForSession,
+  buildPaneFocusHookCommandForSession,
+} from '../utils/tmuxHookCommands.js';
 import { LogService } from './LogService.js';
 
 export type HookEvent = 'pane-created' | 'pane-closed' | 'pane-resized' | 'pane-focus-changed';
@@ -177,6 +180,10 @@ export class TmuxHookManager extends EventEmitter {
         this.pid,
         this.sessionName
       );
+      const paneFocusHookCommand = buildPaneFocusHookCommandForSession(
+        this.sessionName,
+        this.pid
+      );
       const hookCommands = [
         // Pane split (new pane created)
         `tmux set-hook -t '${this.sessionName}' after-split-window 'run-shell "kill -USR2 ${this.pid} 2>/dev/null || true # dmux-hook"'`,
@@ -185,7 +192,7 @@ export class TmuxHookManager extends EventEmitter {
         // Window/client resized
         `tmux set-hook -t '${this.sessionName}' client-resized 'run-shell "kill -USR2 ${this.pid} 2>/dev/null || true # dmux-hook"'`,
         // Pane focus changed
-        `tmux set-hook -t '${this.sessionName}' after-select-pane 'run-shell "kill -USR2 ${this.pid} 2>/dev/null || true # dmux-hook"'`,
+        `tmux set-hook -t '${this.sessionName}' after-select-pane '${paneFocusHookCommand}'`,
       ];
 
       // Install all hooks

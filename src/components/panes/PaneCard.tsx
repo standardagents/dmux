@@ -1,8 +1,9 @@
 import React, { memo } from 'react';
 import { Box, Text } from 'ink';
 import stringWidth from 'string-width';
-import type { DmuxPane } from '../../types.js';
+import type { DmuxPane, DmuxThemeName } from '../../types.js';
 import { COLORS } from '../../theme/colors.js';
+import { getDmuxThemeAccent } from '../../theme/colors.js';
 import { getAgentShortLabel } from '../../utils/agentLaunch.js';
 import { getPaneDisplayName } from '../../utils/paneTitle.js';
 
@@ -10,7 +11,8 @@ interface PaneCardProps {
   pane: DmuxPane;
   isDevSource: boolean;
   selected: boolean;
-  themeName: string;
+  themeName?: string;
+  projectThemeName?: DmuxThemeName;
 }
 
 const ROW_WIDTH = 40;
@@ -36,7 +38,12 @@ const clipToWidth = (value: string, maxWidth: number): string => {
   return clipped;
 };
 
-const PaneCard: React.FC<PaneCardProps> = memo(({ pane, isDevSource, selected }) => {
+const PaneCard: React.FC<PaneCardProps> = memo(({
+  pane,
+  isDevSource,
+  selected,
+  projectThemeName,
+}) => {
   // Get status indicator
   const getStatusIcon = () => {
     if (pane.agentStatus === 'working') return { icon: '✻', color: COLORS.working };
@@ -72,17 +79,23 @@ const PaneCard: React.FC<PaneCardProps> = memo(({ pane, isDevSource, selected })
   const fixedLeftWidth = stringWidth(prefix + statusText + attentionText + sourceText + shellPrefixText + hiddenText);
   const maxSlugWidth = Math.max(0, LEFT_COLUMN_WIDTH - fixedLeftWidth);
   const slugText = clipToWidth(paneName, maxSlugWidth);
+  const projectSelectedColor = projectThemeName
+    ? getDmuxThemeAccent(projectThemeName)
+    : COLORS.selected;
+  const paneSelectedColor = pane.colorTheme
+    ? getDmuxThemeAccent(pane.colorTheme)
+    : projectSelectedColor;
   const slugColor = isFileBrowserPane
     ? 'cyan'
     : selected
-      ? COLORS.selected
+      ? paneSelectedColor
       : COLORS.unselected;
   const shellTagColor = isFileBrowserPane ? 'yellow' : pane.type === 'shell' ? 'cyan' : 'gray';
 
   return (
     <Box width={ROW_WIDTH}>
       <Box width={LEFT_COLUMN_WIDTH}>
-        <Text color={selected ? COLORS.selected : COLORS.border}>{prefix}</Text>
+        <Text color={selected ? paneSelectedColor : COLORS.border}>{prefix}</Text>
         <Text color={status.color}>{statusText}</Text>
         {pane.needsAttention && (
           <Text color={COLORS.warning}>{attentionText}</Text>
@@ -128,9 +141,11 @@ const PaneCard: React.FC<PaneCardProps> = memo(({ pane, isDevSource, selected })
     prevProps.pane.type === nextProps.pane.type &&
     prevProps.pane.shellType === nextProps.pane.shellType &&
     prevProps.pane.agent === nextProps.pane.agent &&
+    prevProps.pane.colorTheme === nextProps.pane.colorTheme &&
     prevProps.isDevSource === nextProps.isDevSource &&
     prevProps.selected === nextProps.selected &&
-    prevProps.themeName === nextProps.themeName
+    prevProps.themeName === nextProps.themeName &&
+    prevProps.projectThemeName === nextProps.projectThemeName
   );
 });
 

@@ -28,6 +28,7 @@ import { enforceControlPaneSize } from '../utils/tmux.js';
 import { SIDEBAR_WIDTH } from '../utils/layoutManager.js';
 import { atomicWriteJson } from '../utils/atomicWrite.js';
 import { normalizeSidebarProjects } from '../utils/sidebarProjects.js';
+import { syncPaneColorThemes } from '../utils/paneColors.js';
 
 // Use p-queue for proper concurrency control instead of manual write lock
 // This prevents race conditions and provides better visibility into queue state
@@ -254,11 +255,21 @@ export default function usePanes(
         projectRoot,
         projectName
       );
+      const syncedPanes = syncPaneColorThemes(
+        panesRef.current,
+        normalizedProjects,
+        projectRoot
+      );
 
+      config.panes = syncedPanes;
       config.sidebarProjects = normalizedProjects;
       config.lastUpdated = new Date().toISOString();
       await atomicWriteJson(panesFile, config);
 
+      if (panesRef.current !== syncedPanes) {
+        panesRef.current = syncedPanes;
+        setPanes(syncedPanes);
+      }
       sidebarProjectsRef.current = normalizedProjects;
       setSidebarProjects(normalizedProjects);
       return normalizedProjects;

@@ -10,11 +10,15 @@ import { render, Box, Text, useInput, useApp } from 'ink';
 import TextInput from 'ink-text-input';
 import { readFileSync } from 'fs';
 import type { SettingDefinition, DmuxSettings } from '../../types.js';
-import { SettingsManager } from '../../utils/settingsManager.js';
+import {
+  DEFAULT_COLOR_THEME_SETTING_KEY,
+  SettingsManager,
+} from '../../utils/settingsManager.js';
 import { enforceControlPaneSize } from '../../utils/tmux.js';
 import { SIDEBAR_WIDTH } from '../../utils/layoutManager.js';
 import { resolveEnabledAgentsSelection } from '../../utils/agentLaunch.js';
 import { resolveNotificationSoundsSelection } from '../../utils/notificationSounds.js';
+import { SIDEBAR_PROJECT_COLOR_THEME_SETTING_KEY } from '../../utils/sidebarProjects.js';
 import { POPUP_CONFIG } from './config.js';
 import {
   PopupWrapper,
@@ -25,7 +29,7 @@ import {
 interface SettingsPopupProps {
   resultFile: string;
   settingDefinitions: SettingDefinition[];
-  settings: DmuxSettings;
+  settings: SettingsPopupValues;
   globalSettings: DmuxSettings;
   projectSettings: DmuxSettings;
   projectRoot: string;
@@ -36,8 +40,10 @@ interface SettingsPopupProps {
 interface PendingSettingUpdate {
   key: string;
   value: any;
-  scope: 'global' | 'project';
+  scope: 'global' | 'project' | 'session';
 }
+
+type SettingsPopupValues = DmuxSettings & Record<string, unknown>;
 
 const THEME_PREVIEW_COLORS: Record<string, string> = {
   red: '#ff5f5f',
@@ -62,7 +68,7 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
 }) => {
   const [mode, setMode] = useState<'list' | 'edit' | 'scope'>('list');
   const [selectedIndex, setSelectedIndex] = useState(initialSelectedIndex);
-  const [currentSettings, setCurrentSettings] = useState<DmuxSettings>({ ...settings });
+  const [currentSettings, setCurrentSettings] = useState<SettingsPopupValues>({ ...settings });
   const [currentGlobalSettings, setCurrentGlobalSettings] = useState<DmuxSettings>({ ...globalSettings });
   const [currentProjectSettings, setCurrentProjectSettings] = useState<DmuxSettings>({ ...projectSettings });
   const pendingUpdatesRef = useRef<PendingSettingUpdate[]>([]);
@@ -81,12 +87,33 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
 
   const isTextEditing = mode === 'edit' && currentDef?.type === 'text';
 
+  const getDirectSaveScope = (
+    definition: SettingDefinition | null | undefined
+  ): 'global' | 'project' | 'session' | null => {
+    if (!definition) {
+      return null;
+    }
+
+    if (
+      definition.scopeBehavior === 'global'
+      || definition.scopeBehavior === 'project'
+      || definition.scopeBehavior === 'session'
+    ) {
+      return definition.scopeBehavior;
+    }
+
+    return null;
+  };
+
   const getOptionColor = (definition: SettingDefinition, optionValue: string, isSelected: boolean): string => {
     if (!isSelected) {
       return 'white';
     }
 
-    if (definition.key === 'colorTheme') {
+    if (
+      definition.key === DEFAULT_COLOR_THEME_SETTING_KEY
+      || definition.key === SIDEBAR_PROJECT_COLOR_THEME_SETTING_KEY
+    ) {
       return THEME_PREVIEW_COLORS[optionValue] || POPUP_CONFIG.titleColor;
     }
 
@@ -135,7 +162,7 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
   };
 
   const applyLocalUpdate = (update: PendingSettingUpdate) => {
-    const nextSettings: DmuxSettings = { ...currentSettings };
+    const nextSettings: SettingsPopupValues = { ...currentSettings };
     const nextGlobalSettings: DmuxSettings = { ...currentGlobalSettings };
     const nextProjectSettings: DmuxSettings = { ...currentProjectSettings };
 
@@ -197,7 +224,7 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
     try {
       const manager = new SettingsManager(projectRoot || process.cwd());
       manager.updateSetting(update.key as keyof DmuxSettings, update.value, 'global');
-      const merged = manager.getSettings();
+      const merged = manager.getSettings() as SettingsPopupValues;
       setCurrentSettings(merged);
       setCurrentGlobalSettings(manager.getGlobalSettings());
       setCurrentProjectSettings(manager.getProjectSettings());
@@ -299,7 +326,7 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
         },
         'global'
       );
-      const merged = manager.getSettings();
+      const merged = manager.getSettings() as SettingsPopupValues;
       setCurrentSettings(merged);
       setCurrentGlobalSettings(manager.getGlobalSettings());
       setCurrentProjectSettings(manager.getProjectSettings());
@@ -354,6 +381,10 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
     }
 
     return null;
+  };
+
+  const getCurrentSettingValue = (key: string): unknown => {
+    return currentSettings[key];
   };
 
   useInput((input, key) => {
@@ -458,7 +489,7 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
           widthEditBaselineRef.current = null;
         }
         // Set initial value based on current setting
-        const currentValue = currentSettings[currentDef.key as keyof DmuxSettings];
+        const currentValue = getCurrentSettingValue(currentDef.key);
         if (currentDef.type === 'boolean') {
           setEditingValueIndex(currentValue ? 0 : 1);
         } else if (currentDef.type === 'select' && currentDef.options) {
@@ -490,6 +521,27 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
             widthEditBaselineRef.current = null;
             resetEditingState();
           })();
+          return;
+        }
+
+        const directSaveScope = getDirectSaveScope(currentDef);
+        if (currentDef && directSaveScope) {
+          let newValue: any = '';
+          if (currentDef.type === 'boolean') {
+            newValue = editingValueIndex === 0;
+          } else if (currentDef.type === 'select' && currentDef.options) {
+            newValue = currentDef.options[editingValueIndex]?.value ?? '';
+          } else if (currentDef.type === 'text') {
+            newValue = textValue;
+          } else if (currentDef.type === 'number') {
+            newValue = numberValue;
+          }
+
+          writeSuccessWithPendingAndExit({
+            key: currentDef.key,
+            value: newValue,
+            scope: directSaveScope,
+          });
           return;
         }
 
@@ -548,7 +600,7 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
               );
             }
 
-            const currentValue = currentSettings[def.key as keyof DmuxSettings];
+            const currentValue = getCurrentSettingValue(def.key);
             const isProjectOverride = def.key in currentProjectSettings;
             const isGlobalSetting = def.key in currentGlobalSettings;
 
@@ -568,7 +620,12 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
                 displayValue = String(currentValue) || 'none';
               }
 
-              if (def.key === 'minPaneWidth' || def.key === 'maxPaneWidth') {
+              const directSaveScope = getDirectSaveScope(def);
+              if (def.key === SIDEBAR_PROJECT_COLOR_THEME_SETTING_KEY) {
+                scopeLabel = '';
+              } else if (directSaveScope) {
+                scopeLabel = ` - ${directSaveScope}`;
+              } else if (def.key === 'minPaneWidth' || def.key === 'maxPaneWidth') {
                 scopeLabel = ' - global';
               } else {
                 scopeLabel = isProjectOverride ? ' - project' : (isGlobalSetting ? ' - global' : '');
@@ -658,7 +715,9 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
                   ? 'Type value • Enter scope • ESC back'
                   : currentDef.type === 'number'
                     ? '←→ adjust • Shift+←→ ±10 • Enter apply • ESC back'
-                    : '↑↓ choose • Enter scope • ESC back'
+                    : getDirectSaveScope(currentDef)
+                      ? '↑↓ choose • Enter apply • ESC back'
+                      : '↑↓ choose • Enter scope • ESC back'
               }
             </Text>
           </Box>
@@ -704,7 +763,7 @@ function main() {
 
   let data: {
     settingDefinitions: SettingDefinition[];
-    settings: DmuxSettings;
+    settings: SettingsPopupValues;
     globalSettings: DmuxSettings;
     projectSettings: DmuxSettings;
     projectRoot: string;

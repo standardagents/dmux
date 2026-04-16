@@ -9,8 +9,17 @@ import {
 import { StateManager } from "../shared/StateManager.js"
 import { LogService } from "./LogService.js"
 import { TmuxService } from "./TmuxService.js"
-import { SETTING_DEFINITIONS } from "../utils/settingsManager.js"
-import type { DmuxPane, ProjectSettings } from "../types.js"
+import {
+  DEFAULT_COLOR_THEME_SETTING_KEY,
+  SETTING_DEFINITIONS,
+} from "../utils/settingsManager.js"
+import type {
+  DmuxPane,
+  DmuxThemeName,
+  ProjectSettings,
+  SettingDefinition,
+  SidebarProject,
+} from "../types.js"
 import { getPaneMenuActions, type PaneMenuActionId } from "../actions/index.js"
 import { INPUT_IGNORE_DELAY } from "../constants/timing.js"
 import {
@@ -29,6 +38,13 @@ import { getPaneProjectRoot } from "../utils/paneProject.js"
 import { getPaneDisplayName } from "../utils/paneTitle.js"
 import type { TrackProjectActivity } from "../types/activity.js"
 import { SettingsManager } from "../utils/settingsManager.js"
+import { DEFAULT_DMUX_THEME, DMUX_THEME_NAMES } from "../theme/themePalette.js"
+import {
+  AUTO_SIDEBAR_PROJECT_COLOR_THEME_VALUE,
+  getSidebarProjectColorThemeSettingValue,
+  SIDEBAR_PROJECT_COLOR_THEME_SETTING_KEY,
+} from "../utils/sidebarProjects.js"
+import { resolveProjectColorTheme } from "../utils/paneColors.js"
 import type {
   ReopenWorktreePopupResult,
   ReopenWorktreePopupState,
@@ -52,6 +68,7 @@ interface PopupOptions {
   width?: number
   height?: number
   title: string
+  themeName?: DmuxThemeName
   positioning?: "standard" | "centered" | "large" | "pane"
   targetPaneId?: string
 }
@@ -231,6 +248,7 @@ export class PopupManager {
         const popupOptions: TmuxPopupOptions = {
           ...positioning,
           title: options.title,
+          themeName: options.themeName,
           cwd: projectRoot || this.config.projectRoot,
         }
 
@@ -618,10 +636,11 @@ export class PopupManager {
 
   async launchSettingsPopup(
     onLaunchHooks: () => Promise<void>,
-    projectRoot?: string
+    projectRoot?: string,
+    sidebarProjects: SidebarProject[] = []
   ): Promise<
-    | { key: string; value: any; scope: "global" | "project" }
-    | { updates: Array<{ key: string; value: any; scope: "global" | "project" }> }
+    | { key: string; value: any; scope: "global" | "project" | "session" }
+    | { updates: Array<{ key: string; value: any; scope: "global" | "project" | "session" }> }
     | null
   > {
     if (!this.checkPopupSupport()) return null
@@ -629,6 +648,59 @@ export class PopupManager {
     try {
       const resolvedProjectRoot = projectRoot || this.config.projectRoot
       const settingsManager = new SettingsManager(resolvedProjectRoot)
+      const resolveSavedProjectTheme = (targetProjectRoot: string) =>
+        new SettingsManager(targetProjectRoot).getSettings().colorTheme
+      const effectiveProjectTheme = resolveProjectColorTheme(
+        resolvedProjectRoot,
+        sidebarProjects
+      )
+      const colorThemeSettingIndex = SETTING_DEFINITIONS.findIndex(
+        (definition) => definition.key === "colorTheme"
+      )
+      const settingDefinitions: SettingDefinition[] = SETTING_DEFINITIONS
+        .filter((definition) => definition.key !== "colorTheme")
+
+      const defaultColorThemeSetting: SettingDefinition = {
+        key: DEFAULT_COLOR_THEME_SETTING_KEY,
+        label: "Default Color Theme",
+        description: "Fallback color used when a project does not have its own saved theme",
+        type: "select",
+        scopeBehavior: "global",
+        options: DMUX_THEME_NAMES.map((themeName) => ({
+          value: themeName,
+          label: themeName.charAt(0).toUpperCase() + themeName.slice(1),
+        })),
+      }
+      const projectColorThemeSetting: SettingDefinition = {
+        key: SIDEBAR_PROJECT_COLOR_THEME_SETTING_KEY,
+        label: "Project Color Theme",
+        description: "Color for this project in the current dmux session. Auto picks an unused color; inherit follows the project's saved/default theme.",
+        type: "select",
+        scopeBehavior: "session",
+        options: [
+          { value: AUTO_SIDEBAR_PROJECT_COLOR_THEME_VALUE, label: "Auto" },
+          { value: "", label: "Inherit Default Theme" },
+          ...DMUX_THEME_NAMES.map((themeName) => ({
+            value: themeName,
+            label: themeName.charAt(0).toUpperCase() + themeName.slice(1),
+          })),
+        ],
+      }
+      const currentSessionProjectThemeSetting = getSidebarProjectColorThemeSettingValue(
+        sidebarProjects,
+        resolvedProjectRoot,
+        resolveSavedProjectTheme
+      )
+      const insertIndex = colorThemeSettingIndex === -1
+        ? settingDefinitions.length
+        : colorThemeSettingIndex
+      settingDefinitions.splice(
+        insertIndex,
+        0,
+        defaultColorThemeSetting,
+        projectColorThemeSetting
+      )
+
       let settingsPopupWidth = 84
       try {
         // Use tmux client dimensions, not the dmux pane's stdout width.
@@ -644,12 +716,23 @@ export class PopupManager {
         [],
         {
           width: settingsPopupWidth,
-          height: Math.min(25, SETTING_DEFINITIONS.length + 8),
+          height: Math.min(25, settingDefinitions.length + 8),
           title: "⚙️  Settings",
+          themeName: effectiveProjectTheme,
         },
         {
-          settingDefinitions: SETTING_DEFINITIONS,
-          settings: settingsManager.getSettings(),
+          settingDefinitions,
+          settings: {
+            ...settingsManager.getSettings(),
+            [DEFAULT_COLOR_THEME_SETTING_KEY]:
+              settingsManager.getGlobalSettings().colorTheme
+              ?? settingsManager.getTeamDefaults().colorTheme
+              ?? DEFAULT_DMUX_THEME,
+            [SIDEBAR_PROJECT_COLOR_THEME_SETTING_KEY]:
+              currentSessionProjectThemeSetting
+              || settingsManager.getProjectSettings().colorTheme
+              || "",
+          } as Record<string, unknown>,
           globalSettings: settingsManager.getGlobalSettings(),
           projectSettings: settingsManager.getProjectSettings(),
           projectRoot: resolvedProjectRoot,
@@ -664,7 +747,11 @@ export class PopupManager {
           ? data.updates.filter(
               (update: any) =>
                 typeof update?.key === "string"
-                && (update?.scope === "global" || update?.scope === "project")
+                && (
+                  update?.scope === "global"
+                  || update?.scope === "project"
+                  || update?.scope === "session"
+                )
             )
           : []
 
@@ -690,7 +777,14 @@ export class PopupManager {
           return pendingUpdates.length > 0 ? { updates: pendingUpdates } : null
         }
 
-        if (typeof data.key === "string" && (data.scope === "global" || data.scope === "project")) {
+        if (
+          typeof data.key === "string"
+          && (
+            data.scope === "global"
+            || data.scope === "project"
+            || data.scope === "session"
+          )
+        ) {
           if (pendingUpdates.length > 0) {
             return {
               updates: [

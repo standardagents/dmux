@@ -124,7 +124,7 @@ export class PaneEventService extends EventEmitter {
         timestamp,
         source: 'hooks',
       } as PaneFocusEvent);
-    }, 100); // 100ms debounce
+    }, 25); // Keep hook updates responsive while still coalescing rapid tmux signals.
   }
 
   /**

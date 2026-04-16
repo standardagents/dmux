@@ -156,6 +156,8 @@ const AGENT_OPTIONS = getAgentDefinitions().map((agent) => ({
   label: agent.name,
 }));
 
+export const DEFAULT_COLOR_THEME_SETTING_KEY = 'defaultColorTheme';
+
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
   {
     key: 'permissionMode',
@@ -205,8 +207,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
   },
   {
     key: 'colorTheme',
-    label: 'Colour Theme',
-    description: 'Choose the accent colour for the dmux UI and welcome pane',
+    label: 'Color Theme',
+    description: 'Choose the accent color for the dmux UI and welcome pane',
     type: 'select',
     options: DMUX_THEME_NAMES.map((themeName) => ({
       value: themeName,

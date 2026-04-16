@@ -13,6 +13,13 @@ interface ThemePalette {
   artTail: string[];
 }
 
+const ANSI_16_HEX_COLORS = [
+  '#000000', '#800000', '#008000', '#808000',
+  '#000080', '#800080', '#008080', '#c0c0c0',
+  '#808080', '#ff0000', '#00ff00', '#ffff00',
+  '#0000ff', '#ff00ff', '#00ffff', '#ffffff',
+] as const;
+
 const THEME_PALETTES: Record<DmuxThemeName, ThemePalette> = {
   red: {
     accentHex: '#ff5f5f',
@@ -99,8 +106,48 @@ export const DECORATIVE_THEME = {
 
 let activeThemeName: DmuxThemeName = DEFAULT_DMUX_THEME;
 
+export function getDmuxThemePalette(themeName: unknown): ThemePalette {
+  return THEME_PALETTES[normalizeDmuxTheme(themeName)];
+}
+
+export function getDmuxThemeAccent(themeName: unknown): string {
+  return getDmuxThemePalette(themeName).accentHex;
+}
+
+function xterm256IndexToHex(colorIndex: number): string | undefined {
+  if (!Number.isInteger(colorIndex) || colorIndex < 0 || colorIndex > 255) {
+    return undefined;
+  }
+
+  if (colorIndex < 16) {
+    return ANSI_16_HEX_COLORS[colorIndex];
+  }
+
+  if (colorIndex >= 232) {
+    const gray = 8 + ((colorIndex - 232) * 10);
+    const grayHex = gray.toString(16).padStart(2, '0');
+    return `#${grayHex}${grayHex}${grayHex}`;
+  }
+
+  const cubeIndex = colorIndex - 16;
+  const steps = [0, 95, 135, 175, 215, 255];
+  const red = steps[Math.floor(cubeIndex / 36)];
+  const green = steps[Math.floor((cubeIndex % 36) / 6)];
+  const blue = steps[cubeIndex % 6];
+
+  return `#${[red, green, blue]
+    .map((channel) => channel.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+export function getDmuxThemeActiveBorderHex(themeName: unknown): string {
+  const activeBorderIndex = Number.parseInt(getDmuxThemePalette(themeName).activeBorder, 10);
+  const activeBorderHex = xterm256IndexToHex(activeBorderIndex);
+  return activeBorderHex || getDmuxThemeAccent(themeName);
+}
+
 export function applyDmuxTheme(themeName: DmuxThemeName): DmuxThemeName {
-  const nextTheme = THEME_PALETTES[themeName];
+  const nextTheme = getDmuxThemePalette(themeName);
   activeThemeName = themeName;
 
   assignMutableRecord(COLORS as unknown as Record<string, string>, {

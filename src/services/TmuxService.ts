@@ -1273,7 +1273,11 @@ export class TmuxService {
    */
   setPaneOptionSync(paneId: string, option: string, value: string): void {
     try {
-      this.execute(`tmux set-option -p -t '${paneId}' ${option} ${value}`, { silent: true });
+      const escapedValue = value.replace(/'/g, `'\\''`);
+      this.execute(
+        `tmux set-option -p -t '${paneId}' ${option} '${escapedValue}'`,
+        { silent: true }
+      );
     } catch (error) {
       this.logger.warn(`Failed to set pane option ${option} for ${paneId}`, 'TmuxService');
     }

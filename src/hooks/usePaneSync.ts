@@ -11,6 +11,7 @@ import { atomicWriteJson } from '../utils/atomicWrite.js';
 import { getPaneTmuxTitle } from '../utils/paneTitle.js';
 import { StateManager } from '../shared/StateManager.js';
 import { normalizeSidebarProjects } from '../utils/sidebarProjects.js';
+import { syncPaneColorThemes } from '../utils/paneColors.js';
 
 /**
  * Enforces that tmux pane titles match the encoded config title for each pane.
@@ -129,19 +130,24 @@ export async function savePanesToFile(
     } catch {}
 
     // Save in config format (use atomic write to prevent race conditions)
-    config.panes = activePanes;
     const projectRoot = config.projectRoot || path.dirname(path.dirname(panesFile));
     const projectName = config.projectName || path.basename(projectRoot);
-    config.sidebarProjects = normalizeSidebarProjects(
+    const normalizedSidebarProjects = normalizeSidebarProjects(
       config.sidebarProjects,
       activePanes,
       projectRoot,
       projectName
     );
+    config.sidebarProjects = normalizedSidebarProjects;
+    config.panes = syncPaneColorThemes(
+      activePanes,
+      normalizedSidebarProjects,
+      projectRoot
+    );
     config.lastUpdated = new Date().toISOString();
     await atomicWriteJson(panesFile, config);
 
-    return activePanes;
+    return config.panes;
   });
 }
 
@@ -270,14 +276,19 @@ export async function saveUpdatedPaneConfig(
     } catch {}
 
     // Update with remapped panes
-    currentConfig.panes = activePanes;
     const projectRoot = currentConfig.projectRoot || path.dirname(path.dirname(panesFile));
     const projectName = currentConfig.projectName || path.basename(projectRoot);
-    currentConfig.sidebarProjects = normalizeSidebarProjects(
+    const normalizedSidebarProjects = normalizeSidebarProjects(
       currentConfig.sidebarProjects,
       activePanes,
       projectRoot,
       projectName
+    );
+    currentConfig.sidebarProjects = normalizedSidebarProjects;
+    currentConfig.panes = syncPaneColorThemes(
+      activePanes,
+      normalizedSidebarProjects,
+      projectRoot
     );
     currentConfig.lastUpdated = new Date().toISOString();
     LogService.getInstance().debug(

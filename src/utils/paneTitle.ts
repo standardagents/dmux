@@ -88,6 +88,15 @@ function getStablePaneTmuxTitle(
   return buildWorktreePaneTitle(pane.slug, projectRoot, projectName);
 }
 
+export function getPaneTmuxDisplayTitle(
+  pane: DmuxPane,
+  fallbackProjectRoot?: string,
+  fallbackProjectName?: string
+): string {
+  return getCustomPaneDisplayName(pane)
+    || getStablePaneTmuxTitle(pane, fallbackProjectRoot, fallbackProjectName);
+}
+
 /**
  * Tmux pane title used for rebinding. Includes a stable project tag for
  * worktree panes so duplicate slugs across projects do not collide.
@@ -98,7 +107,7 @@ export function getPaneTmuxTitle(
   fallbackProjectName?: string
 ): string {
   const stableTitle = getStablePaneTmuxTitle(pane, fallbackProjectRoot, fallbackProjectName);
-  const displayTitle = getCustomPaneDisplayName(pane);
+  const displayTitle = getPaneTmuxDisplayTitle(pane, fallbackProjectRoot, fallbackProjectName);
 
   return displayTitle
     ? encodePaneTmuxTitle(displayTitle, stableTitle)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useRef } from "react"
 import { Box, Text, useApp, useStdout, useInput } from "ink"
 import stringWidth from "string-width"
 import { TmuxService } from "./services/TmuxService.js"
@@ -69,10 +69,11 @@ import {
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
-const ACTIVE_PANE_SYNC_INTERVAL_MS = 350
+const ACTIVE_PANE_SYNC_INTERVAL_MS = 125
 import type {
   DmuxPane,
   DmuxAppProps,
+  DmuxThemeName,
   MergeTargetReference,
 } from "./types.js"
 import PanesGrid from "./components/panes/PanesGrid.js"
@@ -89,12 +90,24 @@ import {
   resolveSelectionAfterPaneClose,
 } from "./utils/projectActions.js"
 import { getPaneProjectRoot } from "./utils/paneProject.js"
-import { normalizeDmuxTheme } from "./theme/themePalette.js"
-import { applyDmuxTheme } from "./theme/colors.js"
+import {
+  applyDmuxTheme,
+  getDmuxThemePalette,
+} from "./theme/colors.js"
 import {
   applyTmuxThemeToSession,
   refreshWelcomePaneTheme,
 } from "./utils/welcomePane.js"
+import {
+  getPaneColorTheme,
+  resolveProjectColorTheme,
+} from "./utils/paneColors.js"
+import {
+  getPaneTitlePrefixValue,
+  paneNeedsAnimatedTitlePrefix,
+  PANE_TITLE_BUSY_FRAMES,
+} from "./utils/paneTitlePrefix.js"
+import { getPaneTmuxDisplayTitle } from "./utils/paneTitle.js"
 
 const DmuxApp: React.FC<DmuxAppProps> = ({
   panesFile,
@@ -112,6 +125,7 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
 
   /* panes state moved to usePanes */
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [focusedPaneId, setFocusedPaneId] = useState<string | null>(null)
   const { statusMessage, setStatusMessage } = useStatusMessages()
   const [isCreatingPane, setIsCreatingPane] = useState(false)
   const {
@@ -124,9 +138,10 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   const { projectSettings, saveSettings } = useProjectSettings(settingsFile)
   const [themeRefreshNonce, setThemeRefreshNonce] = useState(0)
   const [settings, setSettings] = useState(() => new SettingsManager(sessionProjectRoot).getSettings())
-  const [selectedThemeName, setSelectedThemeName] = useState(() =>
-    normalizeDmuxTheme(new SettingsManager(sessionProjectRoot).getSettings().colorTheme)
-  )
+  const paneTitlePrefixCacheRef = useRef(new Map<string, string>())
+  const paneTitleLabelCacheRef = useRef(new Map<string, string>())
+  const paneActiveBorderStyleCacheRef = useRef(new Map<string, string>())
+  const paneTitleSpinnerFrameRef = useRef(0)
 
   // Dialog state management
   const dialogState = useDialogState()
@@ -244,6 +259,7 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
     loadPanes,
     savePanes,
     saveSidebarProjects,
+    eventMode,
   } = usePanes(
     panesFile,
     false,
@@ -520,8 +536,11 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
     ),
     [panes, sidebarProjects, sessionProjectRoot, projectName]
   )
+  const selectedPane = useMemo(
+    () => selectedIndex < panes.length ? panes[selectedIndex] : undefined,
+    [selectedIndex, panes]
+  )
   const selectedProjectRoot = useMemo(() => {
-    const selectedPane = selectedIndex < panes.length ? panes[selectedIndex] : undefined
     if (selectedPane) {
       return getPaneProjectRoot(selectedPane, sessionProjectRoot)
     }
@@ -530,16 +549,48 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
       getProjectActionByIndex(projectActionLayout.actionItems, selectedIndex)?.projectRoot
       || sessionProjectRoot
     )
-  }, [selectedIndex, panes, projectActionLayout.actionItems, sessionProjectRoot])
+  }, [selectedPane, selectedIndex, projectActionLayout.actionItems, sessionProjectRoot])
+  const focusedPane = useMemo(
+    () => focusedPaneId
+      ? panes.find((pane) => pane.paneId === focusedPaneId)
+      : undefined,
+    [focusedPaneId, panes]
+  )
+  const activeProjectRoot = selectedProjectRoot
+  const resolveProjectThemeName = React.useCallback((activeProjectRoot: string) => {
+    return resolveProjectColorTheme(activeProjectRoot, sidebarProjects)
+  }, [sidebarProjects])
+  const activeBorderPane = focusedPane || selectedPane
+  const activeBorderPaneId = activeBorderPane?.paneId
+  const selectedThemeName = useMemo(
+    () => resolveProjectThemeName(activeProjectRoot),
+    [
+      resolveProjectThemeName,
+      activeProjectRoot,
+      themeRefreshNonce,
+    ]
+  )
+  const controlPaneActiveBorderStyle = useMemo(
+    () => `fg=colour${getDmuxThemePalette(selectedThemeName).activeBorder}`,
+    [selectedThemeName]
+  )
+  const projectThemeByRoot = useMemo(() => {
+    const themeMap = new Map<string, DmuxThemeName>()
+
+    for (const group of projectActionLayout.groups) {
+      const paneTheme = group.panes.find((entry) => entry.pane.colorTheme)?.pane.colorTheme
+      themeMap.set(
+        group.projectRoot,
+        paneTheme || resolveProjectThemeName(group.projectRoot)
+      )
+    }
+
+    return themeMap
+  }, [projectActionLayout.groups, resolveProjectThemeName, themeRefreshNonce])
   applyDmuxTheme(selectedThemeName)
 
-  const refreshDmuxSettings = (activeProjectRoot: string = selectedProjectRoot, nextTheme?: string) => {
+  const refreshDmuxSettings = (_activeProjectRoot: string = selectedProjectRoot) => {
     setSettings(new SettingsManager(sessionProjectRoot).getSettings())
-    setSelectedThemeName(
-      nextTheme
-        ? normalizeDmuxTheme(nextTheme)
-        : normalizeDmuxTheme(new SettingsManager(activeProjectRoot).getSettings().colorTheme)
-    )
     setThemeRefreshNonce((current) => current + 1)
   }
   const navigationRows = useMemo(
@@ -556,20 +607,147 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   )
 
   useEffect(() => {
-    setSelectedThemeName(
-      normalizeDmuxTheme(new SettingsManager(selectedProjectRoot).getSettings().colorTheme)
-    )
-  }, [selectedProjectRoot])
-
-  useEffect(() => {
     try {
-      applyTmuxThemeToSession(sessionName, selectedProjectRoot)
+      applyTmuxThemeToSession(sessionName, activeProjectRoot, selectedThemeName)
     } catch {
       // Theme updates are best-effort at runtime.
     }
 
-    void refreshWelcomePaneTheme(panesFile, selectedProjectRoot)
-  }, [panesFile, selectedProjectRoot, selectedThemeName, sessionName])
+    void refreshWelcomePaneTheme(panesFile, activeProjectRoot, selectedThemeName)
+  }, [panesFile, activeProjectRoot, selectedThemeName, sessionName])
+
+  useEffect(() => {
+    if (!process.env.TMUX) {
+      return
+    }
+
+    const tmuxService = TmuxService.getInstance()
+    const syncPaneTitlePrefixes = () => {
+      const cachedPrefixes = paneTitlePrefixCacheRef.current
+      const cachedLabels = paneTitleLabelCacheRef.current
+      const cachedActiveBorderStyles = paneActiveBorderStyleCacheRef.current
+      const activePaneIds = new Set(panes.map((pane) => pane.paneId))
+      const activeBorderStylePaneIds = new Set(activePaneIds)
+      if (controlPaneId) {
+        activeBorderStylePaneIds.add(controlPaneId)
+      }
+
+      for (const paneId of Array.from(cachedPrefixes.keys())) {
+        if (!activePaneIds.has(paneId)) {
+          tmuxService.unsetPaneOptionSync(paneId, '@dmux_title_prefix')
+          cachedPrefixes.delete(paneId)
+        }
+      }
+      for (const paneId of Array.from(cachedLabels.keys())) {
+        if (!activePaneIds.has(paneId)) {
+          tmuxService.unsetPaneOptionSync(paneId, '@dmux_title_label')
+          cachedLabels.delete(paneId)
+        }
+      }
+      for (const paneId of Array.from(cachedActiveBorderStyles.keys())) {
+        if (!activeBorderStylePaneIds.has(paneId)) {
+          tmuxService.unsetPaneOptionSync(paneId, '@dmux_active_border_style')
+          cachedActiveBorderStyles.delete(paneId)
+        }
+      }
+
+      for (const pane of panes) {
+        const paneThemeName = getPaneColorTheme(
+          pane,
+          sidebarProjects,
+          sessionProjectRoot
+        )
+        const prefixValue = getPaneTitlePrefixValue(
+          pane,
+          sidebarProjects,
+          sessionProjectRoot,
+          paneTitleSpinnerFrameRef.current
+        )
+        const labelValue = getPaneTmuxDisplayTitle(
+          pane,
+          sessionProjectRoot,
+          projectName
+        )
+        const activeBorderStyle = `fg=colour${getDmuxThemePalette(paneThemeName).activeBorder}`
+
+        if (cachedPrefixes.get(pane.paneId) !== prefixValue) {
+          tmuxService.setPaneOptionSync(pane.paneId, '@dmux_title_prefix', prefixValue)
+          cachedPrefixes.set(pane.paneId, prefixValue)
+        }
+
+        if (cachedLabels.get(pane.paneId) !== labelValue) {
+          tmuxService.setPaneOptionSync(pane.paneId, '@dmux_title_label', labelValue)
+          cachedLabels.set(pane.paneId, labelValue)
+        }
+
+        if (cachedActiveBorderStyles.get(pane.paneId) !== activeBorderStyle) {
+          tmuxService.setPaneOptionSync(
+            pane.paneId,
+            '@dmux_active_border_style',
+            activeBorderStyle
+          )
+          cachedActiveBorderStyles.set(pane.paneId, activeBorderStyle)
+        }
+
+        if (pane.paneId === activeBorderPaneId) {
+          tmuxService.setSessionOptionSync(
+            sessionName,
+            'pane-active-border-style',
+            activeBorderStyle
+          )
+        }
+      }
+
+      if (controlPaneId && cachedActiveBorderStyles.get(controlPaneId) !== controlPaneActiveBorderStyle) {
+        tmuxService.setPaneOptionSync(
+          controlPaneId,
+          '@dmux_active_border_style',
+          controlPaneActiveBorderStyle
+        )
+        cachedActiveBorderStyles.set(controlPaneId, controlPaneActiveBorderStyle)
+      }
+
+      if (!focusedPane) {
+        tmuxService.setSessionOptionSync(
+          sessionName,
+          'pane-active-border-style',
+          controlPaneActiveBorderStyle
+        )
+      }
+    }
+
+    const hasAnimatedPrefix = panes.some(paneNeedsAnimatedTitlePrefix)
+    if (!hasAnimatedPrefix) {
+      paneTitleSpinnerFrameRef.current = 0
+    }
+
+    syncPaneTitlePrefixes()
+
+    if (!hasAnimatedPrefix) {
+      return
+    }
+
+    const interval = setInterval(() => {
+      paneTitleSpinnerFrameRef.current = (
+        paneTitleSpinnerFrameRef.current + 1
+      ) % PANE_TITLE_BUSY_FRAMES.length
+      syncPaneTitlePrefixes()
+    }, 90)
+
+    return () => {
+      clearInterval(interval)
+    }
+  }, [
+    panes,
+    sidebarProjects,
+    sessionProjectRoot,
+    projectName,
+    activeBorderPaneId,
+    sessionName,
+    controlPaneId,
+    controlPaneActiveBorderStyle,
+    focusedPane,
+  ])
 
   useEffect(() => {
     const maxIndex = Math.max(0, projectActionLayout.totalItems - 1)
@@ -587,8 +765,13 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
     try {
       const focusedPaneId = activePaneId ?? await TmuxService.getInstance().getActivePaneId()
       if (!focusedPaneId || focusedPaneId === controlPaneId) {
+        setFocusedPaneId(null)
         return
       }
+
+      setFocusedPaneId((currentPaneId) =>
+        currentPaneId === focusedPaneId ? currentPaneId : focusedPaneId
+      )
 
       const focusedIndex = panes.findIndex((pane) => pane.paneId === focusedPaneId)
       if (focusedIndex === -1) {
@@ -632,7 +815,7 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
     return () => {
       clearInterval(interval)
     }
-  }, [panes.length, syncSelectedIndexToFocusedPane])
+  }, [eventMode, panes.length, syncSelectedIndexToFocusedPane])
 
   // savePanes moved to usePanes
 
@@ -1374,8 +1557,10 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
         <PanesGrid
           panes={panes}
           selectedIndex={selectedIndex}
+          activeProjectRoot={activeProjectRoot}
           isLoading={isLoading}
           themeName={selectedThemeName}
+          projectThemeByRoot={projectThemeByRoot}
           agentStatuses={agentStatuses}
           activeDevSourcePath={activeDevSourcePath}
           sidebarProjects={sidebarProjects}

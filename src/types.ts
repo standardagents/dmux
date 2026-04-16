@@ -35,6 +35,8 @@ export interface MergeTargetReference {
 export interface SidebarProject {
   projectRoot: string;
   projectName: string;
+  colorTheme?: DmuxThemeName;
+  colorThemeSource?: 'auto' | 'manual';
 }
 
 export interface DmuxPane {
@@ -47,6 +49,7 @@ export interface DmuxPane {
   hidden?: boolean; // Pane is detached from the active dmux window but still running
   projectRoot?: string; // Main repository root this pane belongs to
   projectName?: string; // Display name for pane's project
+  colorTheme?: DmuxThemeName; // Cached effective project accent for fast focus/theme switches
   type?: 'worktree' | 'shell';  // Type of pane (defaults to 'worktree' for backward compat)
   shellType?: string;  // Shell type for shell panes (bash, zsh, fish, fb, etc)
   worktreePath?: string;
@@ -139,6 +142,7 @@ export interface SettingDefinition {
   label: string;
   description: string;
   type: 'boolean' | 'select' | 'text' | 'number' | 'action';
+  scopeBehavior?: 'choose' | 'session' | 'global' | 'project';
   options?: Array<{ value: string; label: string }>;
   min?: number;
   max?: number;

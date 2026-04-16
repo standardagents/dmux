@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPaneExitedHookCommandForSession,
+  buildPaneFocusHookCommandForSession,
 } from '../src/utils/tmuxHookCommands.js';
 
 describe('tmuxHookCommands', () => {
@@ -20,5 +21,15 @@ describe('tmuxHookCommands', () => {
     const encodedSession = Buffer.from(sessionName, 'utf-8').toString('base64');
 
     expect(command).toContain(`DMUX_RECOVERY_SESSION_B64=${encodedSession}`);
+  });
+
+  it('builds pane-focus hook without shelling out to tmux', () => {
+    const command = buildPaneFocusHookCommandForSession('my"session$`x\\y', 99);
+
+    expect(command).toContain('if-shell -F "#{!=:#{@dmux_active_border_style},}"');
+    expect(command).toContain('set-option -F -t \\"my\\"session\\$\\`x\\\\y\\" pane-active-border-style');
+    expect(command).toContain('#{@dmux_active_border_style}');
+    expect(command).toContain('run-shell -b "kill -USR2 99 2>/dev/null || true # dmux-hook"');
+    expect(command).not.toContain('show-options -p -v');
   });
 });

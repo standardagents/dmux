@@ -3,8 +3,12 @@ import { readFileSync } from 'fs';
 import { LogService } from '../services/LogService.js';
 import { TmuxService } from '../services/TmuxService.js';
 import { SIDEBAR_WIDTH } from './layoutManager.js';
-import type { DmuxConfig } from '../types.js';
-import { syncDmuxThemeFromSettings, TMUX_COLORS } from '../theme/colors.js';
+import type { DmuxConfig, DmuxThemeName } from '../types.js';
+import {
+  applyDmuxTheme,
+  syncDmuxThemeFromSettings,
+  TMUX_COLORS,
+} from '../theme/colors.js';
 import { execSync } from 'child_process';
 
 /**
@@ -124,12 +128,21 @@ export async function welcomePaneExists(welcomePaneId: string | undefined): Prom
   return await tmuxService.paneExists(welcomePaneId);
 }
 
-export function applyTmuxThemeToSession(sessionName: string, projectRoot?: string): void {
+function syncThemeForSession(projectRoot?: string, themeName?: DmuxThemeName): void {
+  if (themeName) {
+    applyDmuxTheme(themeName);
+    return;
+  }
+
   syncDmuxThemeFromSettings(projectRoot);
-  execSync(
-    `tmux set-option -t ${sessionName} pane-active-border-style "fg=colour${TMUX_COLORS.activeBorder}"`,
-    { stdio: 'pipe' }
-  );
+}
+
+export function applyTmuxThemeToSession(
+  sessionName: string,
+  projectRoot?: string,
+  themeName?: DmuxThemeName
+): void {
+  syncThemeForSession(projectRoot, themeName);
   execSync(
     `tmux set-option -t ${sessionName} pane-border-style "fg=colour${TMUX_COLORS.inactiveBorder}"`,
     { stdio: 'pipe' }
@@ -138,7 +151,8 @@ export function applyTmuxThemeToSession(sessionName: string, projectRoot?: strin
 
 export async function refreshWelcomePaneTheme(
   panesFile: string,
-  projectRoot?: string
+  projectRoot?: string,
+  themeName?: DmuxThemeName
 ): Promise<void> {
   try {
     const config = JSON.parse(readFileSync(panesFile, 'utf8')) as DmuxConfig;
@@ -146,7 +160,7 @@ export async function refreshWelcomePaneTheme(
       return;
     }
 
-    syncDmuxThemeFromSettings(projectRoot);
+    syncThemeForSession(projectRoot, themeName);
     await renderAsciiArt({
       paneId: config.welcomePaneId,
       art: [],

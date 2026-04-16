@@ -8,6 +8,7 @@ import { TmuxService } from '../services/TmuxService.js';
 import { PaneLifecycleManager } from '../services/PaneLifecycleManager.js';
 import { TMUX_COMMAND_TIMEOUT, TMUX_RETRY_DELAY } from '../constants/timing.js';
 import { atomicWriteJson } from '../utils/atomicWrite.js';
+import { syncPaneColorThemes } from '../utils/paneColors.js';
 import { buildAgentResumeOrLaunchCommand } from '../utils/agentLaunch.js';
 import { ensureGeminiFolderTrusted } from '../utils/geminiTrust.js';
 import { getPaneTmuxTitle } from '../utils/paneTitle.js';
@@ -107,15 +108,20 @@ export async function fetchTmuxPaneIds(maxRetries = 2): Promise<{
  * Handles both old array format and new config format
  */
 export async function loadPanesFromFile(panesFile: string): Promise<DmuxPane[]> {
+  const fallbackProjectRoot = path.dirname(path.dirname(panesFile));
+
   try {
     const content = await fs.readFile(panesFile, 'utf-8');
     const parsed: any = JSON.parse(content);
 
     if (Array.isArray(parsed)) {
-      return parsed as DmuxPane[];
+      return syncPaneColorThemes(parsed as DmuxPane[], [], fallbackProjectRoot);
     } else {
       const config = parsed as DmuxConfig;
-      return config.panes || [];
+      const projectRoot = config.projectRoot || fallbackProjectRoot;
+      const panes = Array.isArray(config.panes) ? config.panes : [];
+      const sidebarProjects = Array.isArray(config.sidebarProjects) ? config.sidebarProjects : [];
+      return syncPaneColorThemes(panes, sidebarProjects, projectRoot);
     }
   } catch (error) {
     // Return empty array if config file doesn't exist or is invalid
