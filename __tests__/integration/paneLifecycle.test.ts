@@ -92,6 +92,7 @@ describe('Pane Lifecycle Integration Tests', () => {
   let tmuxSession: MockTmuxSession;
   let gitRepo: MockGitRepo;
   let createdWorktreePaths: Set<string>;
+  let killedPaneIds: Set<string>;
 
   beforeEach(() => {
     // Reset all mocks
@@ -102,6 +103,7 @@ describe('Pane Lifecycle Integration Tests', () => {
     tmuxSession = createMockTmuxSession('dmux-test', 1);
     gitRepo = createMockGitRepo('main');
     createdWorktreePaths = new Set<string>();
+    killedPaneIds = new Set<string>();
 
     fsMock.existsSync.mockImplementation((target) => {
       const value = String(target);
@@ -134,7 +136,26 @@ describe('Pane Lifecycle Integration Tests', () => {
 
       // Tmux list-panes
       if (cmd.includes('list-panes')) {
-        return returnValue('%0:dmux-control:80x24\n%1:test:80x24');
+        return returnValue(
+          [
+            '%0:dmux-control:80x24',
+            '%1:test:80x24',
+          ]
+            .filter((line) => {
+              const paneId = line.match(/^%\d+/)?.[0];
+              return paneId && !killedPaneIds.has(paneId);
+            })
+            .join('\n')
+        );
+      }
+
+      // Tmux kill-pane
+      if (cmd.includes('kill-pane')) {
+        const paneId = cmd.match(/-t '([^']+)'/)?.[1];
+        if (paneId) {
+          killedPaneIds.add(paneId);
+        }
+        return returnValue('');
       }
 
       // Tmux split-window

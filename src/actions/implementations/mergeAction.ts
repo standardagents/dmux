@@ -132,6 +132,7 @@ async function executeSingleRootMerge(
   const siblingPanes = context.panes.filter(
     p => p.id !== pane.id && p.worktreePath === pane.worktreePath
   );
+  let activeContext = context;
 
   // Helper to kill sibling tmux panes and remove them from config
   const closeSiblings = async () => {
@@ -143,10 +144,14 @@ async function executeSingleRootMerge(
       }
     }
     // Remove siblings from saved panes
-    const withoutSiblings = context.panes.filter(
+    const withoutSiblings = activeContext.panes.filter(
       p => !siblingPanes.some(s => s.id === p.id)
     );
-    await context.savePanes(withoutSiblings);
+    await activeContext.savePanes(withoutSiblings);
+    activeContext = {
+      ...activeContext,
+      panes: withoutSiblings,
+    };
     LogService.getInstance().info(
       `Closed ${siblingPanes.length} sibling pane(s) for merge of ${paneName}`,
       'mergeAction',
@@ -167,7 +172,7 @@ async function executeSingleRootMerge(
         });
         return executeMerge(
           pane,
-          context,
+          activeContext,
           validation.mainBranch,
           mergeTarget.targetRepoPath
         );

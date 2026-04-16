@@ -12,13 +12,102 @@ import { PaneLifecycleManager } from '../../services/PaneLifecycleManager.js';
 import { triggerHook } from '../../utils/hooks.js';
 import { LogService } from '../../services/LogService.js';
 import { WorktreeCleanupService } from '../../services/WorktreeCleanupService.js';
-import { TMUX_SPLIT_DELAY } from '../../constants/timing.js';
 import { deriveProjectRootFromWorktreePath, getPaneProjectRoot } from '../../utils/paneProject.js';
 import { cleanupPromptFilesForSlug } from '../../utils/promptStore.js';
-import { getPaneBranchName } from '../../utils/git.js';
 import { buildDevWatchRespawnCommand } from '../../utils/devWatchCommand.js';
 import { isActiveDevSourcePath } from '../../utils/devSource.js';
 import { getPaneDisplayName } from '../../utils/paneTitle.js';
+
+const PANE_KILL_VERIFY_DELAYS_MS = [50, 150, 300];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function parseTmuxPaneIds(output: string | Buffer): Set<string> {
+  const ids = new Set<string>();
+
+  for (const line of output.toString().split('\n')) {
+    const match = line.trim().match(/^%\d+/);
+    if (match) {
+      ids.add(match[0]);
+    }
+  }
+
+  return ids;
+}
+
+function tmuxPaneExists(paneId: string): boolean {
+  try {
+    const paneList = execSync('tmux list-panes -a -F "#{pane_id}"', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      timeout: 5000,
+    });
+    return parseTmuxPaneIds(paneList).has(paneId);
+  } catch {
+    LogService.getInstance().debug(
+      `Could not verify pane ${paneId} exists, treating as already closed`,
+      'paneActions'
+    );
+    return false;
+  }
+}
+
+async function waitForTmuxPaneToClose(paneId: string): Promise<boolean> {
+  if (!tmuxPaneExists(paneId)) {
+    return true;
+  }
+
+  for (const delay of PANE_KILL_VERIFY_DELAYS_MS) {
+    await sleep(delay);
+    if (!tmuxPaneExists(paneId)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function killTmuxPaneReliably(pane: DmuxPane): Promise<boolean> {
+  if (!tmuxPaneExists(pane.paneId)) {
+    LogService.getInstance().debug(
+      `Pane ${pane.paneId} already gone, skipping kill`,
+      'paneActions'
+    );
+    return true;
+  }
+
+  try {
+    execSync(`tmux kill-pane -t '${pane.paneId}'`, {
+      stdio: 'pipe',
+      timeout: 5000,
+    });
+  } catch (killError) {
+    if (await waitForTmuxPaneToClose(pane.paneId)) {
+      return true;
+    }
+
+    LogService.getInstance().error(
+      `Error killing pane ${pane.paneId}`,
+      'paneActions',
+      pane.id,
+      killError instanceof Error ? killError : undefined
+    );
+    return false;
+  }
+
+  if (await waitForTmuxPaneToClose(pane.paneId)) {
+    return true;
+  }
+
+  LogService.getInstance().warn(
+    `Pane ${pane.paneId} still exists after kill attempt`,
+    'paneActions',
+    pane.id
+  );
+  return false;
+}
 
 /**
  * Close a pane - presents options for how to close
@@ -143,72 +232,25 @@ async function executeCloseOption(
     try {
       let startedBackgroundCleanup = false;
 
-      // CRITICAL: Remove from config FIRST, before killing tmux pane
-      // This prevents the race condition where polling detects "missing" pane
-      // and recreates it before we finish closing
       const updatedPanes = context.panes.filter(p => p.id !== pane.id);
+
+      // Kill and verify the tmux pane before mutating pane state or deleting
+      // the worktree. Sending C-c first can drop an agent back to a shell if
+      // kill-pane fails, so close the pane directly and treat a surviving pane
+      // as a failed close.
+      const paneClosed = await killTmuxPaneReliably(pane);
+      if (!paneClosed) {
+        return {
+          type: 'error',
+          message: `Failed to close pane "${paneName}"; worktree cleanup was not started`,
+          dismissable: true,
+        };
+      }
+
+      // Remove from config only after tmux confirms the pane is gone. The
+      // lifecycle close marker suppresses recreation while the close is in
+      // progress.
       await context.savePanes(updatedPanes);
-
-      // NOW kill the tmux pane (after config is updated)
-      // CRITICAL FIX: First verify the pane exists before trying to interact with it
-      // This prevents crashes/hangs when operating on stale pane IDs
-      let paneExists = false;
-      try {
-        const paneList = execSync('tmux list-panes -a -F "#{pane_id}"', {
-          encoding: 'utf-8',
-          stdio: 'pipe',
-          timeout: 5000 // 5 second timeout to prevent hangs
-        });
-        paneExists = paneList.includes(pane.paneId);
-      } catch {
-        // Error checking panes - assume it doesn't exist
-        LogService.getInstance().debug(`Could not verify pane ${pane.paneId} exists, treating as already closed`, 'paneActions');
-      }
-
-      if (paneExists) {
-        try {
-          // First, try to kill any running process in the pane (like Claude)
-          try {
-            execSync(`tmux send-keys -t '${pane.paneId}' C-c`, {
-              stdio: 'pipe',
-              timeout: 2000 // 2 second timeout
-            });
-            // Wait a moment for the process to exit
-            await new Promise(resolve => setTimeout(resolve, TMUX_SPLIT_DELAY));
-          } catch {
-            // Process might not be running or pane already gone
-          }
-
-          // Now kill the pane
-          execSync(`tmux kill-pane -t '${pane.paneId}'`, {
-            stdio: 'pipe',
-            timeout: 5000 // 5 second timeout
-          });
-
-          // Verify the pane is actually gone
-          await new Promise(resolve => setTimeout(resolve, 100));
-          try {
-            // Check if pane still exists
-            const updatedPaneList = execSync('tmux list-panes -a -F "#{pane_id}"', {
-              encoding: 'utf-8',
-              stdio: 'pipe',
-              timeout: 5000
-            });
-            if (updatedPaneList.includes(pane.paneId)) {
-              const msg = `Pane ${pane.paneId} still exists after kill attempt`;
-              LogService.getInstance().warn(msg, 'paneActions', pane.id);
-            }
-          } catch {
-            // Error listing panes is fine
-          }
-        } catch (killError) {
-          // Pane might already be dead, which is fine
-          const msg = `Error killing pane ${pane.paneId}`;
-          LogService.getInstance().error(msg, 'paneActions', pane.id, killError instanceof Error ? killError : undefined);
-        }
-      } else {
-        LogService.getInstance().debug(`Pane ${pane.paneId} already gone, skipping kill`, 'paneActions');
-      }
 
       // Best-effort cleanup of any stored prompt files for this pane slug
       // (including leftovers from interrupted launches).
@@ -360,13 +402,13 @@ async function executeCloseOption(
         }
       }
 
-        return {
-          type: 'success',
-          message: startedBackgroundCleanup
+      return {
+        type: 'success',
+        message: startedBackgroundCleanup
           ? `Pane "${paneName}" closed successfully (cleanup running in background)`
           : `Pane "${paneName}" closed successfully`,
-          dismissable: true,
-        };
+        dismissable: true,
+      };
     } finally {
       // CRITICAL: Always resume watcher, even if there was an error
       stateManager.resumeConfigWatcher();

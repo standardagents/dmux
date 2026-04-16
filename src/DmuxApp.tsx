@@ -1062,9 +1062,6 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
     projectName,
     defaultProjectRoot: sessionProjectRoot,
     onPaneRemove: async (paneId) => {
-      // Mark pane as closing to prevent race condition with worker
-      await lifecycleManager.beginClose(paneId, 'user requested')
-
       const nextSelection = resolveSelectionAfterPaneClose(
         panes,
         paneId,
@@ -1072,10 +1069,6 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
         sessionProjectRoot,
         projectName
       )
-
-      // Remove from panes list
-      const updatedPanes = panes.filter((p) => p.paneId !== paneId)
-      await savePanes(updatedPanes)
 
       if (nextSelection) {
         setSelectedIndex(nextSelection.selectedIndex)
@@ -1085,9 +1078,6 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
           setSelectedIndex(maxIndex)
         }
       }
-
-      // Mark close as completed (no more lock needed)
-      await lifecycleManager.completeClose(paneId)
 
       const targetPaneId = nextSelection?.pane && !nextSelection.pane.hidden
         ? nextSelection.pane.paneId
