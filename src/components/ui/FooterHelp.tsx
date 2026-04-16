@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { Box, Text } from 'ink';
+import stringWidth from 'string-width';
 import type { Toast } from '../../services/ToastService.js';
 import ToastNotification from './ToastNotification.js';
 
@@ -54,12 +55,12 @@ const FooterHelp: React.FC<FooterHelpProps> = memo(({
     }
 
     // Toast format: "✓ message"
-    const iconAndSpaceLength = 2;
-    const toastTextLength = iconAndSpaceLength + currentToast.message.length;
+    const iconAndSpaceWidth = 2;
+    const toastTextWidth = iconAndSpaceWidth + stringWidth(currentToast.message);
 
     // Available width (sidebar is 40, minus some padding)
     const availableWidth = 38;
-    const wrappedLines = Math.ceil(toastTextLength / availableWidth);
+    const wrappedLines = Math.ceil(toastTextWidth / availableWidth);
 
     // Add 1 for header line
     return wrappedLines + 1;

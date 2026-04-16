@@ -102,6 +102,7 @@ export function render() {
       <li><strong>Hide All Other Panes / Show All Other Panes</strong> — isolate the current pane or bring the others back</li>
       <li><strong>Show Only This Project / Show All Panes</strong> — focus one project's panes in a shared session</li>
       <li><strong>Merge</strong> — merge the pane's work back to main</li>
+      <li><strong>Create GitHub PR</strong> — push the pane branch and file a pull request against its current merge target</li>
       <li><strong>Close</strong> — close the pane and optionally remove the worktree</li>
       <li><strong>Rename</strong> — rename the pane label without changing the worktree slug</li>
       <li><strong>Add Agent to Worktree</strong> — launch another agent in the same worktree</li>

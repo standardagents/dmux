@@ -103,7 +103,7 @@ function Harness({
     saveSidebarProjects,
     loadPanes: vi.fn(),
     cleanExit: vi.fn(),
-    availableAgents: [],
+    getAvailableAgentsForProject: vi.fn(() => []),
     panesFile: '/tmp/dmux.config.json',
     projectRoot: '/repo-root',
     projectActionItems,

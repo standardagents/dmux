@@ -382,7 +382,7 @@ export async function createPane(
       }
       if (resolvedStartPoint) {
         try {
-          execSync(`git rev-parse --verify "refs/heads/${resolvedStartPoint}"`, {
+          execSync(`git rev-parse --verify --end-of-options "${resolvedStartPoint}"`, {
             stdio: 'pipe',
             cwd: projectRoot,
           });
@@ -587,8 +587,9 @@ export async function createPane(
     mergeTargetChain,
   };
 
-  // CRITICAL: Save the pane to config IMMEDIATELY before destroying welcome pane
-  // This is the event that triggers welcome pane destruction (event-based, no polling)
+  // CRITICAL: Save the pane to config IMMEDIATELY before destroying welcome pane.
+  // Only needed for the first content pane — ensures loadPanes sees a pane in config
+  // before we kill the welcome pane (prevents spurious "0 panes" welcome recreation).
   if (isFirstContentPane) {
     try {
       const configContent = fs.readFileSync(configPath, 'utf-8');
@@ -598,13 +599,20 @@ export async function createPane(
       config.panes = [...existingPanes, newPane];
       config.lastUpdated = new Date().toISOString();
       atomicWriteJsonSync(configPath, config);
-
-      // NOW destroy the welcome pane (event-based destruction)
-      const { destroyWelcomePaneCoordinated } = await import('./welcomePaneManager.js');
-      destroyWelcomePaneCoordinated(sessionProjectRoot);
     } catch (error) {
       // Log but don't fail - welcome pane cleanup is not critical
     }
+  }
+
+  // Always destroy the welcome pane if one exists in config.
+  // We do this unconditionally because shell panes detected by detectAndAddShellPanes
+  // can make existingPanes.length > 0 even when no real content panes exist yet,
+  // which causes isFirstContentPane to be false and skips welcome pane destruction.
+  try {
+    const { destroyWelcomePaneCoordinated } = await import('./welcomePaneManager.js');
+    destroyWelcomePaneCoordinated(sessionProjectRoot);
+  } catch {
+    // Ignore - welcome pane cleanup is not critical
   }
 
   // Trigger worktree_created hook (after full pane setup)

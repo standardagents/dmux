@@ -24,6 +24,7 @@ const fsMock = vi.hoisted(() => ({
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
 }));
+const destroyWelcomePaneCoordinatedMock = vi.hoisted(() => vi.fn());
 
 // Mock child_process
 const mockExecSync = createMockExecSync({});
@@ -73,6 +74,10 @@ vi.mock('../../src/services/WorktreeCleanupService.js', () => ({
       enqueueCleanup: mockEnqueueCleanup,
     })),
   },
+}));
+
+vi.mock('../../src/utils/welcomePaneManager.js', () => ({
+  destroyWelcomePaneCoordinated: destroyWelcomePaneCoordinatedMock,
 }));
 
 // Mock fs for reading config
@@ -255,6 +260,42 @@ describe('Pane Lifecycle Integration Tests', () => {
       );
     });
 
+    it('should validate remote tracking baseBranch values without forcing refs/heads', async () => {
+      fsMock.readFileSync.mockImplementation((target) => {
+        const value = String(target);
+        if (value.endsWith('/.dmux/settings.json')) {
+          return JSON.stringify({ baseBranch: 'origin/main' });
+        }
+        if (value.endsWith('/.dmux/dmux.config.json')) {
+          return JSON.stringify({ controlPaneId: '%0' });
+        }
+        return JSON.stringify({});
+      });
+
+      const { createPane } = await import('../../src/utils/paneCreation.js');
+
+      await createPane(
+        {
+          prompt: 'branch from remote main',
+          agent: 'claude',
+          projectName: 'test-project',
+          existingPanes: [],
+          slugBase: 'remote-base',
+        },
+        ['claude']
+      );
+
+      expect(mockExecSync.mock.calls.some(([cmd]) =>
+        typeof cmd === 'string'
+        && cmd.includes('git rev-parse --verify --end-of-options "origin/main"')
+      )).toBe(true);
+
+      expect(mockExecSync.mock.calls.some(([cmd]) =>
+        typeof cmd === 'string'
+        && cmd.includes('refs/heads/origin/main')
+      )).toBe(false);
+    });
+
     it('should attach a fresh pane to an existing worktree without recreating it', async () => {
       const { createPane } = await import('../../src/utils/paneCreation.js');
       const existingWorktreePath = '/test/.dmux/worktrees/resume-me';
@@ -346,6 +387,31 @@ describe('Pane Lifecycle Integration Tests', () => {
         typeof cmd === 'string' && cmd.includes('git worktree add')
       );
       expect(worktreeCall?.[0]).toContain('cd "/target/repo" && git worktree add "/target/repo/.dmux/worktrees/target-slug"');
+    });
+
+    it('should destroy the welcome pane when tracked shell panes make the pane list non-empty', async () => {
+      const { createPane } = await import('../../src/utils/paneCreation.js');
+
+      await createPane(
+        {
+          prompt: 'investigate issue',
+          agent: 'claude',
+          projectName: 'test-project',
+          existingPanes: [
+            {
+              id: 'dmux-1',
+              slug: 'shell-1',
+              prompt: '',
+              paneId: '%5',
+              type: 'shell',
+              shellType: 'zsh',
+            },
+          ],
+        },
+        ['claude']
+      );
+
+      expect(destroyWelcomePaneCoordinatedMock).toHaveBeenCalledWith('/test');
     });
 
     it('should handle slug generation failure (fallback to timestamp)', async () => {

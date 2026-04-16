@@ -100,7 +100,7 @@ export default function usePanes(
           sidebarProjectsRef.current = loadedSidebarProjects;
           setSidebarProjects(loadedSidebarProjects);
           initialLoadComplete.current = true;
-          continue;
+          break; // Exit loop after initial load — pending loads are handled by the next polling/event cycle
         }
 
         // Rebind and filter panes (removes dead shell panes, keeps worktree panes)

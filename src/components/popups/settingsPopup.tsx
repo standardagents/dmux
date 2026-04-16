@@ -39,6 +39,17 @@ interface PendingSettingUpdate {
   scope: 'global' | 'project';
 }
 
+const THEME_PREVIEW_COLORS: Record<string, string> = {
+  red: '#ff5f5f',
+  blue: '#5f87ff',
+  yellow: '#ffd75f',
+  orange: '#ff8700',
+  green: '#5fd75f',
+  purple: '#af87ff',
+  cyan: '#5fd7d7',
+  magenta: '#ff5fd7',
+};
+
 const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
   resultFile,
   settingDefinitions,
@@ -69,6 +80,18 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
   const currentDef = editingKey ? settingDefinitions.find(d => d.key === editingKey) : null;
 
   const isTextEditing = mode === 'edit' && currentDef?.type === 'text';
+
+  const getOptionColor = (definition: SettingDefinition, optionValue: string, isSelected: boolean): string => {
+    if (!isSelected) {
+      return 'white';
+    }
+
+    if (definition.key === 'colorTheme') {
+      return THEME_PREVIEW_COLORS[optionValue] || POPUP_CONFIG.titleColor;
+    }
+
+    return POPUP_CONFIG.titleColor;
+  };
 
   const getNumberBounds = (definition: SettingDefinition): { min: number; max: number } => {
     let min = definition.min ?? Number.MIN_SAFE_INTEGER;
@@ -598,7 +621,10 @@ const SettingsPopupApp: React.FC<SettingsPopupProps> = ({
             <>
               {currentDef.options.map((option, index) => (
                 <Box key={option.value}>
-                  <Text color={editingValueIndex === index ? POPUP_CONFIG.titleColor : 'white'} bold={editingValueIndex === index}>
+                  <Text
+                    color={getOptionColor(currentDef, option.value, editingValueIndex === index)}
+                    bold={editingValueIndex === index}
+                  >
                     {editingValueIndex === index ? '▶ ' : '  '}{option.label}
                   </Text>
                 </Box>

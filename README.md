@@ -15,6 +15,12 @@
   <a href="https://github.com/formkit/dmux/issues"><strong>Issues</strong></a>
 </p>
 
+<p align="center">
+  <strong>Language:</strong>
+  <a href="./README.md">English</a> |
+  <a href="./README.ja.md">日本語</a>
+</p>
+
 ---
 
 <img src="./dmux.webp" alt="dmux demo" width="100%" />
@@ -36,7 +42,7 @@ Press `n` to create a new pane, type a prompt, pick one or more agents (or none 
 
 ## What it does
 
-dmux creates a tmux pane for each task. Every pane gets its own git worktree and branch so agents work in complete isolation. When a task is done, open the pane menu with `m` and choose Merge to bring it back into your main branch.
+dmux creates a tmux pane for each task. Every pane gets its own git worktree and branch so agents work in complete isolation. When a task is done, open the pane menu with `m` and choose Merge to bring it back into your main branch, or Create GitHub PR to push the branch and file a pull request.
 
 - **Worktree isolation** &mdash; each pane is a full working copy, no conflicts between agents
 - **Agent support** &mdash; Claude Code, Codex, OpenCode, Cline CLI, Gemini CLI, Qwen CLI, Amp CLI, pi CLI, Cursor CLI, Copilot CLI, and Crush CLI

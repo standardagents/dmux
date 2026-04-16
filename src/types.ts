@@ -1,6 +1,16 @@
 import type { AgentName, PermissionMode } from './utils/agentLaunch.js';
 import type { NotificationSoundId } from './utils/notificationSounds.js';
 
+export type DmuxThemeName =
+  | 'red'
+  | 'blue'
+  | 'yellow'
+  | 'orange'
+  | 'green'
+  | 'purple'
+  | 'cyan'
+  | 'magenta';
+
 // Agent status with new analyzing state
 export type AgentStatus = 'idle' | 'analyzing' | 'waiting' | 'working';
 
@@ -105,6 +115,8 @@ export interface DmuxSettings {
   enabledNotificationSounds?: NotificationSoundId[];
   // Rotate short dmux tips in the footer
   showFooterTips?: boolean;
+  // Accent color theme used across the TUI and welcome pane
+  colorTheme?: DmuxThemeName;
   // Tmux hooks for event-driven updates (low CPU)
   // true = use hooks, false = use polling, undefined = not yet asked
   useTmuxHooks?: boolean;
@@ -120,6 +132,7 @@ export interface DmuxSettings {
 }
 
 export type SettingsScope = 'global' | 'project';
+export type EffectiveSettingsScope = SettingsScope | 'team';
 
 export interface SettingDefinition {
   key: keyof DmuxSettings | string;

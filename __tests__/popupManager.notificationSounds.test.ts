@@ -69,4 +69,36 @@ describe('PopupManager launchNotificationSoundsPopup', () => {
       scope: 'project',
     });
   });
+
+  it('uses the selected project notification settings when opening another project', async () => {
+    const manager = createPopupManager(['default-system-sound']) as any;
+    manager.checkPopupSupport = vi.fn(() => true);
+    manager.getSettingsManager = vi.fn((projectRoot?: string) => ({
+      getSettings: () => ({
+        enabledNotificationSounds:
+          projectRoot === '/tmp/other-project'
+            ? ['harp']
+            : ['default-system-sound'],
+      }),
+    }));
+    manager.launchPopup = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        enabledNotificationSounds: ['harp'],
+        scope: 'project',
+      },
+    });
+
+    await manager.launchNotificationSoundsPopup('/tmp/other-project');
+
+    expect(manager.launchPopup).toHaveBeenCalledWith(
+      'notificationSoundsPopup.js',
+      [],
+      expect.any(Object),
+      expect.objectContaining({
+        enabledNotificationSounds: ['harp'],
+      }),
+      '/tmp/other-project'
+    );
+  });
 });

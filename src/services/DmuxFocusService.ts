@@ -480,18 +480,24 @@ async function ensureHelperBundle(
       })
     );
 
-    const result = spawnSync('swiftc', [
-      '-O',
-      paths.sourcePath,
-      '-o',
-      tempExecutablePath,
-      '-framework',
-      'AppKit',
-      '-framework',
-      'ApplicationServices',
-    ], {
-      stdio: 'pipe',
-      encoding: 'utf-8',
+    const result = await new Promise<{ status: number | null; stderr: string }>((resolve) => {
+      const child = spawn('swiftc', [
+        '-O',
+        paths.sourcePath,
+        '-o',
+        tempExecutablePath,
+        '-framework',
+        'AppKit',
+        '-framework',
+        'ApplicationServices',
+      ], {
+        stdio: ['ignore', 'ignore', 'pipe'],
+      });
+
+      let stderr = '';
+      child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf-8'); });
+      child.on('close', (code) => { resolve({ status: code, stderr }); });
+      child.on('error', () => { resolve({ status: 1, stderr }); });
     });
 
     if (result.status !== 0) {

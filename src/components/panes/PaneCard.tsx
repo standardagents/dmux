@@ -10,6 +10,7 @@ interface PaneCardProps {
   pane: DmuxPane;
   isDevSource: boolean;
   selected: boolean;
+  themeName: string;
 }
 
 const ROW_WIDTH = 40;
@@ -128,7 +129,8 @@ const PaneCard: React.FC<PaneCardProps> = memo(({ pane, isDevSource, selected })
     prevProps.pane.shellType === nextProps.pane.shellType &&
     prevProps.pane.agent === nextProps.pane.agent &&
     prevProps.isDevSource === nextProps.isDevSource &&
-    prevProps.selected === nextProps.selected
+    prevProps.selected === nextProps.selected &&
+    prevProps.themeName === nextProps.themeName
   );
 });
 

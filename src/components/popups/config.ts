@@ -7,16 +7,16 @@ import { COLORS, TMUX_COLORS } from '../../theme/colors.js';
 export const POPUP_CONFIG = {
   // Visual theme
   borderStyle: 'round' as const,
-  borderColor: COLORS.accent,          // Orange border for main containers
+  get borderColor() { return COLORS.accent; },
   inputBorderStyle: 'bold' as const,
-  inputBorderColor: COLORS.accent,     // Orange border for input boxes
-  titleColor: COLORS.accent,           // Orange titles
-  successColor: COLORS.success,        // Green for success states
-  errorColor: COLORS.error,            // Red for error states
+  get inputBorderColor() { return COLORS.accent; },
+  get titleColor() { return COLORS.accent; },
+  get successColor() { return COLORS.success; },
+  get errorColor() { return COLORS.error; },
   dimColor: 'gray' as const,           // Gray for hints/secondary text
 
   // Tmux popup styling (used in popup.ts) - foreground only
-  tmuxBorderColor: TMUX_COLORS.activeBorder,    // colour214
+  get tmuxBorderColor() { return TMUX_COLORS.activeBorder; },
 
   // Default dimensions
   defaultWidth: 60,

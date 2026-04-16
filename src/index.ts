@@ -17,8 +17,11 @@ import { AutoUpdater } from './services/AutoUpdater.js';
 import { StateManager } from './shared/StateManager.js';
 import { LogService } from './services/LogService.js';
 import { TmuxService } from './services/TmuxService.js';
-import { createWelcomePane, destroyWelcomePane } from './utils/welcomePane.js';
-import { TMUX_COLORS } from './theme/colors.js';
+import {
+  applyTmuxThemeToSession,
+  createWelcomePane,
+  destroyWelcomePane,
+} from './utils/welcomePane.js';
 import { SIDEBAR_WIDTH } from './utils/layoutManager.js';
 import { validateSystemRequirements, printValidationResults } from './utils/systemCheck.js';
 import { getUntrackedPanes } from './utils/shellPaneDetection.js';
@@ -29,6 +32,7 @@ import { shouldUseQuietDevWatchExit } from './utils/devWatchExit.js';
 import { buildPaneExitedHookCommandForSession } from './utils/tmuxHookCommands.js';
 import { ensureTmuxRuntimeCompatibility } from './utils/tmuxRuntimeCompatibility.js';
 import { claimProcessShutdown } from './utils/processShutdown.js';
+import { sendTmuxShellCommand } from './utils/tmuxSendKeys.js';
 import {
   addSidebarProject,
   hasSidebarProject,
@@ -318,7 +322,7 @@ class Dmux {
           }
         }
 
-        execSync(`tmux send-keys -t ${this.sessionName} "${dmuxCommand}" Enter`, { stdio: 'inherit' });
+        sendTmuxShellCommand(this.sessionName, dmuxCommand, 'inherit');
       }
       execSync(`tmux attach-session -t ${this.sessionName}`, { stdio: 'inherit' });
       return;
@@ -1135,11 +1139,11 @@ class Dmux {
       const oldPanesFile = path.join(homeDmuxDir, `${projectIdentifier}-panes.json`);
       const oldSettingsFile = path.join(homeDmuxDir, `${projectIdentifier}-settings.json`);
       const oldUpdateSettingsFile = path.join(homeDmuxDir, 'update-settings.json');
-      
+
       let panes = [];
       let settings = {};
       let updateSettings = {};
-      
+
       // Try to read old panes file
       if (await this.fileExists(oldPanesFile)) {
         try {
@@ -1149,7 +1153,7 @@ class Dmux {
           // Intentionally silent - migration is best-effort
         }
       }
-      
+
       // Try to read old settings file
       if (await this.fileExists(oldSettingsFile)) {
         try {
@@ -1159,7 +1163,7 @@ class Dmux {
           // Intentionally silent - migration is best-effort
         }
       }
-      
+
       // Try to read old update settings file
       if (await this.fileExists(oldUpdateSettingsFile)) {
         try {
@@ -1169,7 +1173,7 @@ class Dmux {
           // Intentionally silent - migration is best-effort
         }
       }
-      
+
       // Check for config from previous parent directory location
       if (await this.fileExists(oldParentConfigFile)) {
         try {
@@ -1257,12 +1261,11 @@ class Dmux {
   private applySessionPaneBorderOptions(sessionName: string, stdio: 'pipe' | 'inherit' = 'pipe') {
     const sessionOptions = [
       `set-option -t ${sessionName} pane-border-status top`,
-      `set-option -t ${sessionName} pane-active-border-style "fg=colour${TMUX_COLORS.activeBorder}"`,
-      `set-option -t ${sessionName} pane-border-style "fg=colour${TMUX_COLORS.inactiveBorder}"`,
       `set-option -t ${sessionName} pane-border-format " #{?@dmux_attention,#[bold]![ready] #[default],}${TMUX_PANE_TITLE_DISPLAY_FORMAT} "`,
     ].join(' \\; ');
 
     execSync(`tmux ${sessionOptions}`, { stdio });
+    applyTmuxThemeToSession(sessionName, this.projectRoot);
   }
 
   private setupResizeHook(sessionName: string = this.sessionName) {

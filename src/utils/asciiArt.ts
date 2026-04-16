@@ -4,6 +4,7 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { resolveDistPath } from "./runtimePaths.js"
+import { getActiveDmuxTheme } from "../theme/colors.js"
 
 export interface RenderAsciiArtOptions {
   paneId: string
@@ -67,7 +68,10 @@ export async function renderAsciiArt(
   const absolutePath = path.isAbsolute(scriptPath)
     ? scriptPath
     : path.resolve(scriptPath)
-  await tmuxService.sendKeys(paneId, `'node "${absolutePath}"' Enter`)
+  await tmuxService.sendKeys(
+    paneId,
+    `'DMUX_THEME=${getActiveDmuxTheme()} node "${absolutePath}"' Enter`
+  )
   await new Promise((resolve) => setTimeout(resolve, 150))
 }
 

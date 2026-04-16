@@ -4,30 +4,21 @@
 // This runs continuously without showing a command prompt
 
 import { ASCII_ART as ASCII_ART_EXPORTS } from "../utils/asciiArt.js"
+import { DECORATIVE_THEME, syncDmuxThemeFromSettings } from "../theme/colors.js"
 
 // Parse the ASCII art string into an array of lines
 const ASCII_ART = ASCII_ART_EXPORTS.dmuxWelcome.trim().split("\n")
 
 const FILL_CHAR = "·"
-const ORANGE = "\x1b[38;5;208m" // ANSI 256-color orange
-const DIM_GRAY = "\x1b[38;5;238m" // Dim gray for fill dots
-const RESET = "\x1b[0m" // Reset color
+syncDmuxThemeFromSettings(process.cwd())
+const DIM_GRAY = DECORATIVE_THEME.fill
+const RESET = DECORATIVE_THEME.reset
 
 // Static drop settings
 const TAIL_LENGTH = 8 // Length of the fading tail
 const NUM_STATIC_DROPS = 150 // Number of drops to render in static view
 
-// Shades from bright to dim for the tail effect (orange)
-const SHADES = [
-  "\x1b[38;5;214m", // Bright orange
-  "\x1b[38;5;208m", // Orange
-  "\x1b[38;5;202m", // Darker orange
-  "\x1b[38;5;166m", // Even darker
-  "\x1b[38;5;130m", // Very dark orange
-  "\x1b[38;5;94m", // Brown-orange
-  "\x1b[38;5;58m", // Dark brown
-  "\x1b[38;5;236m", // Almost black
-]
+const SHADES = DECORATIVE_THEME.tail
 
 interface GridCell {
   char: string
@@ -133,7 +124,7 @@ function render(width: number, height: number): void {
         if (artCol >= 0 && artCol < trimmedArt.length) {
           const artChar = trimmedArt[artCol]
           // ASCII art takes precedence - render in orange
-          line += ORANGE + artChar + RESET
+          line += DECORATIVE_THEME.primary + artChar + RESET
         } else {
           // Outside art region - show background or fill char
           const bg = backgroundGrid[row][col]

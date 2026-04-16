@@ -15,7 +15,7 @@ function createPopupManager(
     terminalHeight: 40,
     availableAgents,
     settingsManager: {
-      getSettings: () => ({ defaultAgent }),
+      getSettings: () => ({ defaultAgent, enabledAgents: availableAgents }),
       getGlobalSettings: () => ({}),
       getProjectSettings: () => ({}),
     },
@@ -65,6 +65,33 @@ describe('PopupManager launchAgentChoicePopup', () => {
       expect.any(Object),
       undefined,
       undefined
+    );
+  });
+
+  it('uses the selected project settings when opening another project', async () => {
+    const manager = createPopupManager(['claude'], 'claude') as any;
+    manager.checkPopupSupport = vi.fn(() => true);
+    manager.getAvailableAgents = vi.fn((projectRoot?: string) =>
+      projectRoot === '/tmp/other-project' ? ['codex'] : ['claude']
+    );
+    manager.getSettingsManager = vi.fn((projectRoot?: string) => ({
+      getSettings: () => ({
+        defaultAgent: projectRoot === '/tmp/other-project' ? 'codex' : 'claude',
+      }),
+    }));
+    manager.launchPopup = vi.fn().mockResolvedValue({
+      success: true,
+      data: ['codex'],
+    });
+
+    await manager.launchAgentChoicePopup('/tmp/other-project');
+
+    expect(manager.launchPopup).toHaveBeenCalledWith(
+      'agentChoicePopup.js',
+      [JSON.stringify(['codex']), JSON.stringify(['codex'])],
+      expect.any(Object),
+      undefined,
+      '/tmp/other-project'
     );
   });
 });

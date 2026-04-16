@@ -76,12 +76,15 @@ describe('PopupManager launchSingleAgentChoicePopup', () => {
   it('uses the single-agent popup with the configured default agent', async () => {
     const manager = createPopupManager(['claude', 'codex']) as any;
     manager.checkPopupSupport = vi.fn(() => true);
+    manager.getAvailableAgents = vi.fn(() => ['claude', 'codex']);
+    manager.getSettingsManager = vi.fn(() => ({
+      getSettings: () => ({
+        defaultAgent: 'codex',
+      }),
+    }));
     manager.launchPopup = vi.fn().mockResolvedValue({
       success: false,
       cancelled: true,
-    });
-    manager.config.settingsManager.getSettings = () => ({
-      defaultAgent: 'codex',
     });
 
     await manager.launchSingleAgentChoicePopup(

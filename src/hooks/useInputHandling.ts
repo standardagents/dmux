@@ -50,6 +50,7 @@ import {
   getCurrentTmuxSessionName,
   type RemotePaneActionShortcut,
 } from "../utils/remotePaneActions.js"
+import { SettingsManager } from "../utils/settingsManager.js"
 
 // Type for the action system returned by useActionSystem hook
 interface ActionSystem {
@@ -90,6 +91,7 @@ interface UseInputHandlingParams {
   projectSettings: any
   saveSettings: (settings: any) => Promise<void>
   settingsManager: any
+  refreshDmuxSettings: (projectRoot?: string, nextTheme?: string) => void
 
   // Services
   popupManager: PopupManager
@@ -115,7 +117,7 @@ interface UseInputHandlingParams {
   cleanExit: () => void
 
   // Agent info
-  availableAgents: AgentName[]
+  getAvailableAgentsForProject: (projectRoot?: string) => AgentName[]
   panesFile: string
 
   // Project info
@@ -155,6 +157,7 @@ export function useInputHandling(params: UseInputHandlingParams) {
     projectSettings,
     saveSettings,
     settingsManager,
+    refreshDmuxSettings,
     popupManager,
     actionSystem,
     controlPaneId,
@@ -171,7 +174,7 @@ export function useInputHandling(params: UseInputHandlingParams) {
     saveSidebarProjects,
     loadPanes,
     cleanExit,
-    availableAgents,
+    getAvailableAgentsForProject,
     panesFile,
     projectRoot,
     projectActionItems,
@@ -835,12 +838,13 @@ export function useInputHandling(params: UseInputHandlingParams) {
     }
 
     let selectedAgents: AgentName[] = []
-    if (availableAgents.length === 0) {
+    const targetAvailableAgents = getAvailableAgentsForProject(targetProjectRoot)
+    if (targetAvailableAgents.length === 0) {
       setStatusMessage("No agents available")
       setTimeout(() => setStatusMessage(""), STATUS_MESSAGE_DURATION_SHORT)
       return
-    } else if (availableAgents.length === 1) {
-      selectedAgents = [availableAgents[0]]
+    } else if (targetAvailableAgents.length === 1) {
+      selectedAgents = [targetAvailableAgents[0]]
     } else {
       const agents = await popupManager.launchAgentChoicePopup(targetProjectRoot)
       if (agents === null) {
@@ -1260,6 +1264,8 @@ export function useInputHandling(params: UseInputHandlingParams) {
       }, getActiveProjectRoot())
       if (result) {
         try {
+          const activeProjectRoot = getActiveProjectRoot()
+          const projectSettingsManager = new SettingsManager(activeProjectRoot)
           const updates = Array.isArray((result as any).updates)
             ? (result as any).updates
             : [result]
@@ -1277,10 +1283,16 @@ export function useInputHandling(params: UseInputHandlingParams) {
               continue
             }
 
-            settingsManager.updateSetting(
+            projectSettingsManager.updateSetting(
               update.key as keyof import("../types.js").DmuxSettings,
               update.value,
               update.scope
+            )
+            refreshDmuxSettings(
+              activeProjectRoot,
+              update.key === "colorTheme" && typeof update.value === "string"
+                ? update.value
+                : undefined
             )
             savedCount += 1
             lastScope = update.scope

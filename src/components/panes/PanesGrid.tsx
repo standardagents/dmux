@@ -16,6 +16,7 @@ interface PanesGridProps {
   panes: DmuxPane[]
   selectedIndex: number
   isLoading: boolean
+  themeName: string
   agentStatuses?: AgentStatusMap
   activeDevSourcePath?: string
   sidebarProjects: SidebarProject[]
@@ -31,6 +32,7 @@ const PanesGrid: React.FC<PanesGridProps> = memo(({
   panes,
   selectedIndex,
   isLoading,
+  themeName,
   agentStatuses,
   activeDevSourcePath,
   sidebarProjects,
@@ -179,7 +181,7 @@ const PanesGrid: React.FC<PanesGridProps> = memo(({
                 pane={paneWithStatus}
                 isDevSource={isDevSource}
                 selected={isSelected}
-
+                themeName={themeName}
               />
             )
           })}

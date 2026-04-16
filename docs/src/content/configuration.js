@@ -3,7 +3,7 @@ export const meta = { title: 'Configuration' };
 export function render() {
   return `
     <h1>Configuration</h1>
-    <p class="lead">dmux uses a layered configuration system with global and project-level settings. Project settings override global settings.</p>
+    <p class="lead">dmux uses a layered configuration system with global, team, and project-level settings. Project settings override global settings, and global settings override optional team defaults committed in the repo.</p>
 
     <h2>Configuration Files</h2>
     <table>
@@ -12,6 +12,7 @@ export function render() {
       </thead>
       <tbody>
         <tr><td><code>~/.dmux.global.json</code></td><td>Global</td><td>Default settings for all projects</td></tr>
+        <tr><td><code>.dmux.defaults.json</code></td><td>Team</td><td>Repo-committed defaults shared across the project</td></tr>
         <tr><td><code>.dmux/settings.json</code></td><td>Project</td><td>Project-specific overrides</td></tr>
         <tr><td><code>.dmux/dmux.config.json</code></td><td>Project</td><td>Pane tracking (managed by dmux)</td></tr>
       </tbody>
@@ -128,6 +129,7 @@ export function render() {
   "minPaneWidth": 50,
   "maxPaneWidth": 80
 }</code></pre>
+    <p><code>.dmux.defaults.json</code> lives at the repo root and is intended for safe, team-wide defaults that you want in version control. Personal overrides still belong in <code>.dmux/settings.json</code> or <code>~/.dmux.global.json</code>.</p>
 
     <h2>macOS Attention Notifications</h2>
     <p>On macOS, dmux ships with a native helper that can send attention notifications for background panes. This is progressive enhancement only: dmux continues working on Linux and Windows without it.</p>
@@ -138,10 +140,11 @@ export function render() {
     </ul>
 
     <h2>Setting Precedence</h2>
-    <p>When both global and project settings define the same key, the <strong>project setting wins</strong>:</p>
+    <p>When the same key is defined in multiple places, dmux resolves it in this order:</p>
     <ol>
       <li>Project settings (<code>.dmux/settings.json</code>) — highest priority</li>
       <li>Global settings (<code>~/.dmux.global.json</code>) — fallback</li>
+      <li>Team defaults (<code>.dmux.defaults.json</code>) — shared repo baseline</li>
       <li>Built-in defaults — if neither file defines the setting</li>
     </ol>
 

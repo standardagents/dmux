@@ -54,6 +54,10 @@ describe("pane menu actions", () => {
     expect(actions.find((action) => action.id === PaneAction.CLOSE)).toMatchObject({
       shortcut: "x",
     })
+    expect(actions.find((action) => action.id === PaneAction.CREATE_PR)).toMatchObject({
+      shortcut: "p",
+      label: "Create GitHub PR",
+    })
     expect(actions[actions.length - 1].id).toBe(PaneAction.ATTACH_AGENT)
   })
 

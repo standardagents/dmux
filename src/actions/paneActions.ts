@@ -10,6 +10,7 @@ export {
   viewPane,
   closePane,
   mergePane,
+  createPullRequest,
   renamePane,
   duplicatePane,
   copyPath,

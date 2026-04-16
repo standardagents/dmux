@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react"
 import { Box, Text, useApp, useStdout, useInput } from "ink"
+import stringWidth from "string-width"
 import { TmuxService } from "./services/TmuxService.js"
 
 // Hooks
@@ -86,6 +87,12 @@ import {
   getProjectActionByIndex,
 } from "./utils/projectActions.js"
 import { getPaneProjectRoot } from "./utils/paneProject.js"
+import { normalizeDmuxTheme } from "./theme/themePalette.js"
+import { applyDmuxTheme } from "./theme/colors.js"
+import {
+  applyTmuxThemeToSession,
+  refreshWelcomePaneTheme,
+} from "./utils/welcomePane.js"
 
 const DmuxApp: React.FC<DmuxAppProps> = ({
   panesFile,
@@ -113,7 +120,11 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   // Settings state
   const [settingsManager] = useState(() => new SettingsManager(projectRoot))
   const { projectSettings, saveSettings } = useProjectSettings(settingsFile)
-  const settings = settingsManager.getSettings()
+  const [themeRefreshNonce, setThemeRefreshNonce] = useState(0)
+  const [settings, setSettings] = useState(() => new SettingsManager(sessionProjectRoot).getSettings())
+  const [selectedThemeName, setSelectedThemeName] = useState(() =>
+    normalizeDmuxTheme(new SettingsManager(sessionProjectRoot).getSettings().colorTheme)
+  )
 
   // Dialog state management
   const dialogState = useDialogState()
@@ -150,6 +161,8 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   const availableAgents = resolveEnabledAgentsSelection(
     settings.enabledAgents
   )
+  const getAvailableAgentsForProject = (targetProjectRoot: string = selectedProjectRoot) =>
+    resolveEnabledAgentsSelection(new SettingsManager(targetProjectRoot).getSettings().enabledAgents)
   const footerTips = useMemo(() => getFooterTips(isDevMode), [isDevMode])
   const showFooterTips = settings.showFooterTips !== false && footerTips.length > 0
   const [footerTipIndex, setFooterTipIndex] = useState(() => getRandomFooterTipIndex(footerTips.length))
@@ -241,7 +254,7 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   useEffect(() => {
     const checkHooksPreference = async () => {
       // Check if user already has a preference
-      const settings = settingsManager.getSettings()
+      const settings = new SettingsManager(sessionProjectRoot).getSettings()
 
       if (settings.useTmuxHooks !== undefined) {
         // User has already decided
@@ -260,6 +273,7 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
         setUseHooks(true)
         // Save the preference
         settingsManager.updateSetting('useTmuxHooks', true, 'global')
+        refreshDmuxSettings()
       } else {
         // Need to ask user - show prompt
         setShowHooksPrompt(true)
@@ -515,6 +529,17 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
       || sessionProjectRoot
     )
   }, [selectedIndex, panes, projectActionLayout.actionItems, sessionProjectRoot])
+  applyDmuxTheme(selectedThemeName)
+
+  const refreshDmuxSettings = (activeProjectRoot: string = selectedProjectRoot, nextTheme?: string) => {
+    setSettings(new SettingsManager(sessionProjectRoot).getSettings())
+    setSelectedThemeName(
+      nextTheme
+        ? normalizeDmuxTheme(nextTheme)
+        : normalizeDmuxTheme(new SettingsManager(activeProjectRoot).getSettings().colorTheme)
+    )
+    setThemeRefreshNonce((current) => current + 1)
+  }
   const navigationRows = useMemo(
     () => isLoading
       ? projectActionLayout.groups.flatMap((group) =>
@@ -527,6 +552,22 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
     () => isLoading ? [] : buildGroupStartRows(projectActionLayout),
     [isLoading, projectActionLayout]
   )
+
+  useEffect(() => {
+    setSelectedThemeName(
+      normalizeDmuxTheme(new SettingsManager(selectedProjectRoot).getSettings().colorTheme)
+    )
+  }, [selectedProjectRoot])
+
+  useEffect(() => {
+    try {
+      applyTmuxThemeToSession(sessionName, selectedProjectRoot)
+    } catch {
+      // Theme updates are best-effort at runtime.
+    }
+
+    void refreshWelcomePaneTheme(panesFile, selectedProjectRoot)
+  }, [panesFile, selectedProjectRoot, selectedThemeName, sessionName])
 
   useEffect(() => {
     const maxIndex = Math.max(0, projectActionLayout.totalItems - 1)
@@ -548,12 +589,13 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   const selectAgentsForPaneCreation = async (
     targetProjectRoot?: string
   ): Promise<AgentName[] | null> => {
-    if (availableAgents.length === 0) {
+    const targetRoot = targetProjectRoot || selectedProjectRoot
+    if (getAvailableAgentsForProject(targetRoot).length === 0) {
       return []
     }
 
     const selectedAgents = await popupManager.launchAgentChoicePopup(
-      targetProjectRoot || selectedProjectRoot
+      targetRoot
     )
     if (selectedAgents === null) {
       return null
@@ -744,7 +786,7 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
     let selectedAgent: AgentName | undefined
 
     if (!candidate.path) {
-      if (availableAgents.length === 0) {
+      if (getAvailableAgentsForProject(reopenProjectRoot).length === 0) {
         setStatusMessage("No enabled agents available for opening this branch")
         setTimeout(() => setStatusMessage(""), STATUS_MESSAGE_DURATION_SHORT)
         return
@@ -1137,17 +1179,20 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
         setShowHooksPrompt(false)
         setUseHooks(true)
         settingsManager.updateSetting('useTmuxHooks', true, 'global')
+        refreshDmuxSettings()
       } else if (input === 'n') {
         // No - use polling
         setShowHooksPrompt(false)
         setUseHooks(false)
         settingsManager.updateSetting('useTmuxHooks', false, 'global')
+        refreshDmuxSettings()
       } else if (key.return) {
         // Select current option
         setShowHooksPrompt(false)
         const selected = hooksPromptIndex === 0
         setUseHooks(selected)
         settingsManager.updateSetting('useTmuxHooks', selected, 'global')
+        refreshDmuxSettings()
       }
     },
     { isActive: showHooksPrompt }
@@ -1178,6 +1223,7 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
     projectSettings,
     saveSettings,
     settingsManager,
+    refreshDmuxSettings,
     popupManager,
     actionSystem,
     controlPaneId,
@@ -1194,7 +1240,7 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
     saveSidebarProjects,
     loadPanes,
     cleanExit,
-    availableAgents,
+    getAvailableAgentsForProject,
     panesFile,
     projectRoot: sessionProjectRoot,
     projectActionItems: projectActionLayout.actionItems,
@@ -1207,7 +1253,8 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   // - Normal mode calculation:
   //   - Base footer: 4 lines (marginTop + logs divider + logs line + keyboard shortcuts)
   //   - Footer tip: +1 line when footer tips are enabled
-  //   - Toast: +2 lines (toast message + marginBottom) if currentToast exists
+  //   - Toast (active): wrapped lines + header + marginBottom
+  //   - Toast (queued, transitioning): header + marginBottom (2 lines)
   //   - Debug info: +1 line if DEBUG_DMUX
   //   - Status line: +1 line if updateAvailable/currentBranch/debugMessage
   //   - Status messages: +1 line per active message
@@ -1228,14 +1275,19 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
       // Add toast notification (calculate wrapped lines + header)
       if (currentToast) {
         // Toast format: "✓ message" - icon (1) + space (1) + message
-        const iconAndSpaceLength = 2;
-        const toastTextLength = iconAndSpaceLength + currentToast.message.length;
+        // Use stringWidth for CJK-aware display width calculation
+        const iconAndSpaceWidth = 2;
+        const toastDisplayWidth = iconAndSpaceWidth + stringWidth(currentToast.message);
 
         // Available width is sidebar width (40) minus padding/margins (~2)
         const availableWidth = SIDEBAR_WIDTH - 2;
-        const wrappedLines = Math.ceil(toastTextLength / availableWidth);
+        const wrappedLines = Math.ceil(toastDisplayWidth / availableWidth);
 
         footerLines += wrappedLines + 1 + 1; // wrapped lines + header line + marginBottom
+      } else if (toastQueueLength > 0) {
+        // When there are queued toasts but no current toast (transition state),
+        // FooterHelp still renders the notification header + marginBottom
+        footerLines += 1 + 1; // header line + marginBottom
       }
 
       // Add debug info
@@ -1259,13 +1311,14 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   const contentHeight = Math.max(terminalHeight - footerLines, 10)
 
   return (
-    <Box flexDirection="column" height={terminalHeight}>
+    <Box key={`theme-${selectedThemeName}-${themeRefreshNonce}`} flexDirection="column" height={terminalHeight}>
       {/* Main content area - height dynamically adjusts for status messages */}
       <Box flexDirection="column" height={contentHeight} overflow="hidden">
         <PanesGrid
           panes={panes}
           selectedIndex={selectedIndex}
           isLoading={isLoading}
+          themeName={selectedThemeName}
           agentStatuses={agentStatuses}
           activeDevSourcePath={activeDevSourcePath}
           sidebarProjects={sidebarProjects}

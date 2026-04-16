@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
-import type { DmuxSettings, SettingsScope, SettingDefinition } from '../types.js';
+import type { DmuxSettings, SettingsScope, EffectiveSettingsScope, SettingDefinition } from '../types.js';
 import {
   DEFAULT_MIN_PANE_WIDTH,
   DEFAULT_MAX_PANE_WIDTH,
@@ -24,8 +24,14 @@ import {
   isNotificationSoundId,
   type NotificationSoundId,
 } from './notificationSounds.js';
+import {
+  DEFAULT_DMUX_THEME,
+  DMUX_THEME_NAMES,
+  isDmuxThemeName,
+} from '../theme/themePalette.js';
 
 const GLOBAL_SETTINGS_PATH = join(homedir(), '.dmux.global.json');
+const TEAM_DEFAULTS_FILENAME = '.dmux.defaults.json';
 const PERMISSION_MODES = ['', 'plan', 'acceptEdits', 'bypassPermissions'] as const;
 function isPermissionMode(value: string): value is NonNullable<DmuxSettings['permissionMode']> {
   return (PERMISSION_MODES as readonly string[]).includes(value);
@@ -47,6 +53,76 @@ function isValidMinPaneWidth(value: unknown): value is number {
     value >= MIN_MIN_PANE_WIDTH &&
     value <= MAX_MIN_PANE_WIDTH
   );
+}
+
+function sanitizeLoadedSettings(value: unknown): DmuxSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  const parsed = value as Record<string, unknown>;
+  const sanitized: DmuxSettings = {};
+
+  if (typeof parsed.permissionMode === 'string' && isPermissionMode(parsed.permissionMode)) {
+    sanitized.permissionMode = parsed.permissionMode;
+  }
+
+  if (typeof parsed.enableAutopilotByDefault === 'boolean') {
+    sanitized.enableAutopilotByDefault = parsed.enableAutopilotByDefault;
+  }
+
+  if (
+    typeof parsed.defaultAgent === 'string'
+    && (parsed.defaultAgent === '' || isAgentName(parsed.defaultAgent))
+  ) {
+    sanitized.defaultAgent = parsed.defaultAgent;
+  }
+
+  if (Array.isArray(parsed.enabledAgents)) {
+    sanitized.enabledAgents = parsed.enabledAgents.filter(
+      (agent): agent is AgentName => typeof agent === 'string' && isAgentName(agent)
+    );
+  }
+
+  if (Array.isArray(parsed.enabledNotificationSounds)) {
+    sanitized.enabledNotificationSounds = parsed.enabledNotificationSounds.filter(
+      (soundId): soundId is NotificationSoundId =>
+        typeof soundId === 'string' && isNotificationSoundId(soundId)
+    );
+  }
+
+  if (typeof parsed.showFooterTips === 'boolean') {
+    sanitized.showFooterTips = parsed.showFooterTips;
+  }
+
+  if (typeof parsed.colorTheme === 'string' && isDmuxThemeName(parsed.colorTheme)) {
+    sanitized.colorTheme = parsed.colorTheme;
+  }
+
+  if (typeof parsed.useTmuxHooks === 'boolean') {
+    sanitized.useTmuxHooks = parsed.useTmuxHooks;
+  }
+
+  if (typeof parsed.baseBranch === 'string' && (parsed.baseBranch === '' || isValidBranchName(parsed.baseBranch))) {
+    sanitized.baseBranch = parsed.baseBranch;
+  }
+
+  if (
+    typeof parsed.branchPrefix === 'string'
+    && (parsed.branchPrefix === '' || isValidBranchName(parsed.branchPrefix))
+  ) {
+    sanitized.branchPrefix = parsed.branchPrefix;
+  }
+
+  if (isValidMinPaneWidth(parsed.minPaneWidth)) {
+    sanitized.minPaneWidth = parsed.minPaneWidth;
+  }
+
+  if (isValidMaxPaneWidth(parsed.maxPaneWidth)) {
+    sanitized.maxPaneWidth = parsed.maxPaneWidth;
+  }
+
+  return sanitized;
 }
 
 function cloneSettingsArrays(settings: DmuxSettings): DmuxSettings {
@@ -72,6 +148,7 @@ const DEFAULT_SETTINGS: DmuxSettings = {
   enabledAgents: getDefaultEnabledAgents(),
   enabledNotificationSounds: getDefaultNotificationSoundSelection(),
   showFooterTips: true,
+  colorTheme: DEFAULT_DMUX_THEME,
 };
 
 const AGENT_OPTIONS = getAgentDefinitions().map((agent) => ({
@@ -125,6 +202,16 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     label: 'Show Footer Tips',
     description: 'Rotate short dmux tips in the footer. Disable this if you prefer a quieter sidebar.',
     type: 'boolean',
+  },
+  {
+    key: 'colorTheme',
+    label: 'Colour Theme',
+    description: 'Choose the accent colour for the dmux UI and welcome pane',
+    type: 'select',
+    options: DMUX_THEME_NAMES.map((themeName) => ({
+      value: themeName,
+      label: themeName.charAt(0).toUpperCase() + themeName.slice(1),
+    })),
   },
   {
     key: 'useTmuxHooks',
@@ -181,35 +268,37 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
 export class SettingsManager {
   private globalPath: string;
   private projectPath: string;
+  private teamDefaultsPath: string;
   private globalSettings: DmuxSettings = {};
   private projectSettings: DmuxSettings = {};
+  private teamDefaults: DmuxSettings = {};
 
   constructor(projectRoot?: string) {
+    const root = projectRoot || process.cwd();
     this.globalPath = GLOBAL_SETTINGS_PATH;
-    this.projectPath = join(projectRoot || process.cwd(), '.dmux', 'settings.json');
+    this.projectPath = join(root, '.dmux', 'settings.json');
+    this.teamDefaultsPath = join(root, TEAM_DEFAULTS_FILENAME);
     this.loadSettings();
   }
 
-  private loadSettings(): void {
-    // Load global settings
-    if (existsSync(this.globalPath)) {
-      try {
-        const data = readFileSync(this.globalPath, 'utf-8');
-        this.globalSettings = JSON.parse(data);
-      } catch (error) {
-        console.error('Failed to load global settings:', error);
-      }
+  private loadSettingsFile(filePath: string, label: string): DmuxSettings {
+    if (!existsSync(filePath)) {
+      return {};
     }
 
-    // Load project settings
-    if (existsSync(this.projectPath)) {
-      try {
-        const data = readFileSync(this.projectPath, 'utf-8');
-        this.projectSettings = JSON.parse(data);
-      } catch (error) {
-        console.error('Failed to load project settings:', error);
-      }
+    try {
+      const data = readFileSync(filePath, 'utf-8');
+      return sanitizeLoadedSettings(JSON.parse(data));
+    } catch (error) {
+      console.error(`Failed to load ${label}:`, error);
+      return {};
     }
+  }
+
+  private loadSettings(): void {
+    this.teamDefaults = this.loadSettingsFile(this.teamDefaultsPath, 'team defaults');
+    this.globalSettings = this.loadSettingsFile(this.globalPath, 'global settings');
+    this.projectSettings = this.loadSettingsFile(this.projectPath, 'project settings');
   }
 
   private getValidGlobalMinPaneWidth(): number {
@@ -249,11 +338,12 @@ export class SettingsManager {
   }
 
   /**
-   * Get merged settings (project settings override global)
+   * Get merged settings (project > global > team defaults > built-in defaults)
    */
   getSettings(): DmuxSettings {
     const merged = cloneSettingsArrays({
       ...DEFAULT_SETTINGS,
+      ...this.teamDefaults,
       ...this.globalSettings,
       ...this.projectSettings,
     });
@@ -304,6 +394,9 @@ export class SettingsManager {
     }
     if (key === 'permissionMode' && typeof value === 'string' && !isPermissionMode(value)) {
       throw new Error(`Invalid permissionMode: "${value}"`);
+    }
+    if (key === 'colorTheme' && !isDmuxThemeName(value)) {
+      throw new Error(`Invalid colorTheme: "${String(value)}"`);
     }
     if (key === 'enabledAgents') {
       if (!Array.isArray(value)) {
@@ -377,6 +470,9 @@ export class SettingsManager {
   updateSettings(settings: Partial<DmuxSettings>, scope: SettingsScope): void {
     if (typeof settings.permissionMode === 'string' && !isPermissionMode(settings.permissionMode)) {
       throw new Error(`Invalid permissionMode: "${settings.permissionMode}"`);
+    }
+    if (settings.colorTheme !== undefined && !isDmuxThemeName(settings.colorTheme)) {
+      throw new Error(`Invalid colorTheme: "${String(settings.colorTheme)}"`);
     }
     if (settings.enabledAgents !== undefined) {
       if (!Array.isArray(settings.enabledAgents)) {
@@ -526,9 +622,16 @@ export class SettingsManager {
   }
 
   /**
+   * Get team defaults (committed to repo, read-only)
+   */
+  getTeamDefaults(): DmuxSettings {
+    return cloneSettingsArrays(this.teamDefaults);
+  }
+
+  /**
    * Get the effective scope for a setting (where it's currently defined)
    */
-  getEffectiveScope(key: keyof DmuxSettings): SettingsScope | null {
+  getEffectiveScope(key: keyof DmuxSettings): EffectiveSettingsScope | null {
     if (key === 'minPaneWidth') {
       return this.globalSettings.minPaneWidth !== undefined ? 'global' : null;
     }
@@ -537,6 +640,7 @@ export class SettingsManager {
     }
     if (key in this.projectSettings) return 'project';
     if (key in this.globalSettings) return 'global';
+    if (key in this.teamDefaults) return 'team';
     return null;
   }
 }
