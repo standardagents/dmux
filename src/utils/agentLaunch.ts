@@ -1,8 +1,12 @@
 import { TmuxService } from '../services/TmuxService.js';
 import {
   buildPromptReadAndDeleteSnippet,
+  shellQuote,
   writePromptFile,
 } from './promptStore.js';
+import {
+  buildCodexPaneEnvironmentPrefix,
+} from './codexHooks.js';
 
 export const AGENT_IDS = [
   'claude',
@@ -540,6 +544,8 @@ export async function launchAgentInPane(opts: {
   prompt: string;
   slug: string;
   projectRoot: string;
+  dmuxPaneId?: string;
+  codexHookEventFile?: string;
   permissionMode?: '' | 'plan' | 'acceptEdits' | 'bypassPermissions';
 }): Promise<void> {
   const { paneId, agent, prompt, slug, projectRoot, permissionMode } = opts;
@@ -577,6 +583,11 @@ export async function launchAgentInPane(opts: {
   } else if (agent === 'codex') {
     const permissionFlags = getPermissionFlags('codex', permissionMode);
     const permissionSuffix = permissionFlags ? ` ${permissionFlags}` : '';
+    const codexEnvPrefix = buildCodexPaneEnvironmentPrefix({
+      dmuxPaneId: opts.dmuxPaneId || '',
+      tmuxPaneId: paneId,
+      eventFile: opts.codexHookEventFile,
+    });
     let codexCmd: string;
     if (hasInitialPrompt) {
       let promptFilePath: string | null = null;
@@ -588,17 +599,12 @@ export async function launchAgentInPane(opts: {
 
       if (promptFilePath) {
         const promptBootstrap = buildPromptReadAndDeleteSnippet(promptFilePath);
-        codexCmd = `${promptBootstrap}; codex "$DMUX_PROMPT_CONTENT"${permissionSuffix}`;
+        codexCmd = `${promptBootstrap}; ${codexEnvPrefix} codex --enable codex_hooks "$DMUX_PROMPT_CONTENT"${permissionSuffix}`;
       } else {
-        const escapedPrompt = prompt
-          .replace(/\\/g, '\\\\')
-          .replace(/"/g, '\\"')
-          .replace(/`/g, '\\`')
-          .replace(/\$/g, '\\$');
-        codexCmd = `codex "${escapedPrompt}"${permissionSuffix}`;
+        codexCmd = `${codexEnvPrefix} codex --enable codex_hooks ${shellQuote(prompt)}${permissionSuffix}`;
       }
     } else {
-      codexCmd = `codex${permissionSuffix}`;
+      codexCmd = `${codexEnvPrefix} codex --enable codex_hooks${permissionSuffix}`;
     }
     await tmuxService.sendShellCommand(paneId, codexCmd);
     await tmuxService.sendTmuxKeys(paneId, 'Enter');

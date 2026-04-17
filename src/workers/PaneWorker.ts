@@ -1,5 +1,7 @@
 import { parentPort, workerData } from 'worker_threads';
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import path from 'path';
 import { capturePaneContent } from '../utils/paneCapture.js';
 import { TmuxService } from '../services/TmuxService.js';
 import type { AgentName } from '../utils/agentLaunch.js';
@@ -14,6 +16,7 @@ import type {
   OutboundMessage,
   StatusChangePayload,
   AnalysisNeededPayload,
+  CodexTurnStoppedPayload,
   ErrorPayload,
   UserInteractionPayload,
 } from './WorkerMessages.js';
@@ -26,6 +29,7 @@ class PaneWorker {
   private paneId: string;
   private tmuxPaneId: string;
   private agent?: AgentName;
+  private worktreePath?: string;
   private captureHistory: Array<{ raw: string; fingerprint: string }> = [];
   private pollInterval: NodeJS.Timeout | null = null;
   private pollIntervalMs: number;
@@ -39,13 +43,18 @@ class PaneWorker {
   private lastAgentActivityAt: number = 0;
   private awaitingAgentAfterUserInteraction: boolean = false;
   private statusBeforeAnalyzing: 'idle' | 'waiting' | 'working' = 'idle';
+  private codexEventFile?: string;
+  private lastCodexEventTimestamp = 0;
+  private lastCodexEventTurnId = '';
   private tmux = TmuxService.getInstance();
 
   constructor(config: WorkerConfig) {
     this.paneId = config.paneId;
     this.tmuxPaneId = config.tmuxPaneId;
     this.agent = config.agent;
+    this.worktreePath = config.worktreePath;
     this.pollIntervalMs = config.pollInterval || 1000;
+    this.codexEventFile = this.resolveCodexEventFile();
 
     this.setupMessageHandler();
     this.startPolling();
@@ -109,6 +118,10 @@ class PaneWorker {
       const output = capturePaneContent(this.tmuxPaneId, PaneWorker.CAPTURE_LINE_COUNT);
       const activityFingerprint = buildPaneActivityFingerprint(output);
       const now = Date.now();
+
+      if (this.maybeHandleCodexTurnStopped(output, activityFingerprint)) {
+        return;
+      }
 
       const lines = output.split('\n');
       const recentLines = lines.slice(-20).join('\n');
@@ -260,6 +273,84 @@ class PaneWorker {
       : this.currentStatus;
     this.updateStatus('analyzing');
     this.requestAnalysis(content, reason);
+  }
+
+  private resolveCodexEventFile(): string | undefined {
+    if (this.agent !== 'codex' || !this.worktreePath) {
+      return undefined;
+    }
+
+    return path.join(this.worktreePath, '.codex', 'dmux', `${this.paneId}.json`);
+  }
+
+  private maybeHandleCodexTurnStopped(output: string, fingerprint: string): boolean {
+    if (!this.codexEventFile) {
+      return false;
+    }
+
+    let raw: string;
+    try {
+      raw = fs.readFileSync(this.codexEventFile, 'utf-8');
+    } catch {
+      return false;
+    }
+
+    let event: any;
+    try {
+      event = JSON.parse(raw);
+    } catch {
+      return false;
+    }
+
+    const timestamp = Number(event.timestamp || 0);
+    const turnId = typeof event.turnId === 'string' ? event.turnId : '';
+    if (!timestamp || timestamp < this.lastCodexEventTimestamp) {
+      return false;
+    }
+
+    if (timestamp === this.lastCodexEventTimestamp && turnId === this.lastCodexEventTurnId) {
+      return false;
+    }
+
+    if (event.dmuxPaneId !== this.paneId) {
+      return false;
+    }
+
+    if (event.tmuxPaneId && event.tmuxPaneId !== this.tmuxPaneId) {
+      return false;
+    }
+
+    this.lastCodexEventTimestamp = timestamp;
+    this.lastCodexEventTurnId = turnId;
+    this.awaitingAgentAfterUserInteraction = false;
+    this.settledStateConfirmed = true;
+    this.lastStaticContent = output;
+    this.lastStaticFingerprint = fingerprint;
+    this.captureHistory = [{ raw: output, fingerprint }];
+
+    const previousStatus = this.currentStatus;
+    this.currentStatus = 'idle';
+    this.emit('status-change', {
+      status: 'idle',
+      previousStatus,
+      captureSnapshot: output,
+    });
+
+    const payload: CodexTurnStoppedPayload = {
+      captureSnapshot: output,
+      eventFile: this.codexEventFile,
+      source: typeof event.source === 'string' ? event.source : 'codex-hook',
+    };
+
+    if (turnId) {
+      payload.turnId = turnId;
+    }
+    if (typeof event.lastAssistantMessage === 'string' && event.lastAssistantMessage.trim()) {
+      payload.lastAssistantMessage = event.lastAssistantMessage;
+    }
+
+    this.emit('codex-turn-stopped', payload);
+    return true;
   }
 
   private handleAnalysisComplete(payload: any): void {

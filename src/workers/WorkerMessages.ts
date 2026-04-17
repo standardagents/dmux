@@ -16,7 +16,7 @@ export interface InboundMessage extends WorkerMessage {
 
 // Messages sent from worker to main thread
 export interface OutboundMessage extends WorkerMessage {
-  type: 'ready' | 'status-change' | 'capture-result' | 'analysis-needed' | 'error' | 'shutdown-complete' | 'pane-removed' | 'user-interaction';
+  type: 'ready' | 'status-change' | 'capture-result' | 'analysis-needed' | 'codex-turn-stopped' | 'error' | 'shutdown-complete' | 'pane-removed' | 'user-interaction';
   paneId: string;
 }
 
@@ -25,6 +25,7 @@ export interface WorkerConfig {
   paneId: string;
   tmuxPaneId: string;
   agent?: AgentName;
+  worktreePath?: string;
   pollInterval?: number; // Default 1000ms
 }
 
@@ -39,6 +40,14 @@ export interface StatusChangePayload {
 export interface AnalysisNeededPayload {
   captureSnapshot: string;
   reason: 'new-static-content' | 'revalidation';
+}
+
+export interface CodexTurnStoppedPayload {
+  captureSnapshot: string;
+  turnId?: string;
+  lastAssistantMessage?: string;
+  eventFile: string;
+  source: string;
 }
 
 export interface UserInteractionPayload {

@@ -10,6 +10,10 @@ import { TMUX_COMMAND_TIMEOUT, TMUX_RETRY_DELAY } from '../constants/timing.js';
 import { atomicWriteJson } from '../utils/atomicWrite.js';
 import { buildAgentResumeOrLaunchCommand } from '../utils/agentLaunch.js';
 import { ensureGeminiFolderTrusted } from '../utils/geminiTrust.js';
+import {
+  buildCodexHookedCommand,
+  installCodexPaneHooks,
+} from '../utils/codexHooks.js';
 import { getPaneTmuxTitle } from '../utils/paneTitle.js';
 import {
   getVisiblePanes,
@@ -49,10 +53,28 @@ async function restoreAgentSessionForPane(
   }
 
   await new Promise((resolve) => setTimeout(resolve, 200));
-  await tmuxService.sendShellCommand(
-    paneId,
-    buildAgentResumeOrLaunchCommand(pane.agent, pane.permissionMode)
-  );
+  let command = buildAgentResumeOrLaunchCommand(pane.agent, pane.permissionMode);
+
+  if (pane.agent === 'codex' && pane.worktreePath) {
+    let codexHookEventFile: string | undefined;
+    try {
+      codexHookEventFile = installCodexPaneHooks({
+        worktreePath: pane.worktreePath,
+        dmuxPaneId: pane.id,
+        tmuxPaneId: paneId,
+      }).eventFile;
+    } catch {
+      // Hook installation is best effort; Codex can still resume normally.
+    }
+
+    command = buildCodexHookedCommand(command, {
+      dmuxPaneId: pane.id,
+      tmuxPaneId: paneId,
+      eventFile: codexHookEventFile,
+    });
+  }
+
+  await tmuxService.sendShellCommand(paneId, command);
   await tmuxService.sendTmuxKeys(paneId, 'Enter');
 }
 

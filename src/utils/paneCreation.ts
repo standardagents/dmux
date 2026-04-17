@@ -37,6 +37,10 @@ import { ensureGeminiFolderTrusted } from './geminiTrust.js';
 import { isValidBranchName } from './git.js';
 import { sendPromptViaTmux } from './agentPromptDispatch.js';
 import { readWorktreeMetadata, writeWorktreeMetadata } from './worktreeMetadata.js';
+import {
+  buildCodexHookedCommand,
+  installCodexPaneHooks,
+} from './codexHooks.js';
 
 export interface CreatePaneOptions {
   prompt: string;
@@ -557,6 +561,23 @@ export async function createPane(
       ensureGeminiFolderTrusted(geminiWorkspacePath);
     }
 
+    let codexHookEventFile: string | undefined;
+    if (agent === 'codex') {
+      try {
+        codexHookEventFile = installCodexPaneHooks({
+          worktreePath,
+          dmuxPaneId: newPane.id,
+          tmuxPaneId: paneInfo,
+        }).eventFile;
+      } catch (error) {
+        LogService.getInstance().warn(
+          `Failed to install Codex hooks for ${slug}: ${error instanceof Error ? error.message : String(error)}`,
+          'paneCreation',
+          newPane.id
+        );
+      }
+    }
+
     const promptTransport = getPromptTransport(agent);
     const shouldSendPromptViaTmux = hasInitialPrompt && promptTransport === 'send-keys';
     let baselineCommand: string | undefined;
@@ -598,6 +619,14 @@ export async function createPane(
       }
     } else {
       launchCommand = buildAgentCommand(agent, settings.permissionMode);
+    }
+
+    if (agent === 'codex') {
+      launchCommand = buildCodexHookedCommand(launchCommand, {
+        dmuxPaneId: newPane.id,
+        tmuxPaneId: paneInfo,
+        eventFile: codexHookEventFile,
+      });
     }
 
     await tmuxService.sendShellCommand(paneInfo, launchCommand);

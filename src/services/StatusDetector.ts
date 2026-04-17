@@ -5,6 +5,7 @@ import { PaneWorkerManager } from './PaneWorkerManager.js';
 import { PaneAnalyzer } from './PaneAnalyzer.js';
 import type { PaneAnalysis } from './PaneAnalyzer.js';
 import type { OutboundMessage } from '../workers/WorkerMessages.js';
+import type { CodexTurnStoppedPayload } from '../workers/WorkerMessages.js';
 import { StateManager } from '../shared/StateManager.js';
 import { LogService } from './LogService.js';
 import { getPaneDisplayName } from '../utils/paneTitle.js';
@@ -70,6 +71,10 @@ export class StatusDetector extends EventEmitter {
     // Handle analysis requests from workers
     this.messageBus.subscribe('analysis-needed', async (paneId, message) => {
       await this.handleAnalysisRequest(paneId, message);
+    });
+
+    this.messageBus.subscribe('codex-turn-stopped', async (paneId, message) => {
+      await this.handleCodexTurnStopped(paneId, message);
     });
 
     // Handle worker errors (silently - don't log to console)
@@ -144,6 +149,64 @@ export class StatusDetector extends EventEmitter {
     }
 
     this.emit('status-updated', updateEvent);
+  }
+
+  private async handleCodexTurnStopped(
+    paneId: string,
+    message: OutboundMessage
+  ): Promise<void> {
+    const payload = (message.payload || {}) as CodexTurnStoppedPayload;
+    const captureSnapshot = payload.captureSnapshot || '';
+
+    this.cancelLLMRequest(paneId, LLM_ABORT_REASON_SUPERSEDED);
+
+    const tmuxPaneId = await this.getTmuxPaneId(paneId);
+    if (!tmuxPaneId) {
+      return;
+    }
+
+    const previousStatus = this.paneStatuses.get(paneId);
+    const finalStatus: AgentStatus = 'idle';
+    this.paneStatuses.set(paneId, finalStatus);
+
+    let summaryDetails: Pick<PaneAnalysis, 'summary' | 'attentionTitle' | 'attentionBody'> = {};
+    try {
+      const pane = StateManager.getInstance().getPaneById(paneId);
+      summaryDetails = await this.paneAnalyzer.extractSummary(
+        payload.lastAssistantMessage || captureSnapshot,
+        {
+          paneName: pane ? getPaneDisplayName(pane) : paneId,
+          panePrompt: pane?.prompt,
+          agentLabel: pane?.agent,
+        }
+      );
+    } catch (error) {
+      LogService.getInstance().debug(
+        `Codex hook summary extraction failed for pane ${paneId}: ${error instanceof Error ? error.message : String(error)}`,
+        'statusDetector',
+        paneId
+      );
+    }
+
+    const analysis: PaneAnalysis = {
+      state: 'open_prompt',
+      summary: summaryDetails.summary,
+      attentionTitle: summaryDetails.attentionTitle,
+      attentionBody: summaryDetails.attentionBody,
+    };
+
+    this.emit('status-updated', {
+      paneId,
+      status: finalStatus,
+      previousStatus,
+      summary: analysis.summary,
+      analyzerError: '',
+    } satisfies StatusUpdateEvent);
+
+    const attentionEvent = this.buildAttentionEvent(paneId, tmuxPaneId, finalStatus, analysis);
+    if (attentionEvent) {
+      this.emit('attention-needed', attentionEvent);
+    }
   }
 
   /**

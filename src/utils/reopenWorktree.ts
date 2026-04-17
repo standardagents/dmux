@@ -21,6 +21,10 @@ import { SettingsManager } from './settingsManager.js';
 import { filterEnabledAgents, getInstalledAgents } from './agentDetection.js';
 import { getCurrentBranch } from './git.js';
 import { readWorktreeMetadata } from './worktreeMetadata.js';
+import {
+  buildCodexHookedCommand,
+  installCodexPaneHooks,
+} from './codexHooks.js';
 
 export interface ReopenWorktreeOptions {
   agent?: AgentName;
@@ -168,6 +172,7 @@ export async function reopenWorktree(
       ? configuredAgent
       : preferredOrder.find((candidate) => candidateAgents.includes(candidate)));
   const permissionMode = metadata?.permissionMode ?? settings.permissionMode;
+  const dmuxPaneId = `dmux-${Date.now()}`;
 
   // Resume the agent session (or start interactive mode when no resume command is available).
   if (agent) {
@@ -175,7 +180,26 @@ export async function reopenWorktree(
       ensureGeminiFolderTrusted(worktreePath);
     }
 
-    const resumeCommand = buildAgentResumeOrLaunchCommand(agent, permissionMode);
+    let resumeCommand = buildAgentResumeOrLaunchCommand(agent, permissionMode);
+    if (agent === 'codex') {
+      let codexHookEventFile: string | undefined;
+      try {
+        codexHookEventFile = installCodexPaneHooks({
+          worktreePath,
+          dmuxPaneId,
+          tmuxPaneId: paneInfo,
+        }).eventFile;
+      } catch {
+        // Hook installation is best effort; Codex can still resume normally.
+      }
+
+      resumeCommand = buildCodexHookedCommand(resumeCommand, {
+        dmuxPaneId,
+        tmuxPaneId: paneInfo,
+        eventFile: codexHookEventFile,
+      });
+    }
+
     await tmuxService.sendShellCommand(paneInfo, resumeCommand);
     await tmuxService.sendTmuxKeys(paneInfo, 'Enter');
   }
@@ -187,7 +211,7 @@ export async function reopenWorktree(
   const currentBranch = getCurrentBranch(worktreePath);
 
   const newPane: DmuxPane = {
-    id: `dmux-${Date.now()}`,
+    id: dmuxPaneId,
     slug,
     displayName: metadata?.displayName,
     branchName: (metadata?.branchName || currentBranch) !== slug

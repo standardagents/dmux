@@ -55,6 +55,7 @@ export class PaneWorkerManager {
         paneId: pane.id,
         tmuxPaneId: pane.paneId,
         agent: pane.agent,
+        worktreePath: pane.worktreePath,
         pollInterval: 1000 // 1 second polling
       };
 
