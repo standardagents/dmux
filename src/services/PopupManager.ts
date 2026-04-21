@@ -360,7 +360,7 @@ export class PopupManager {
     try {
       const popupHeight = Math.floor(this.config.terminalHeight * 0.8)
       const effectivePath = projectPath || this.config.projectRoot
-      const settings = this.config.settingsManager.getSettings()
+      const settings = this.getSettingsManager(effectivePath).getSettings()
       const shouldPromptForGitOptions =
         (settings.promptForGitOptionsOnCreate ?? false) && (options.allowGitOptions ?? true)
       const popupArgs = [effectivePath, shouldPromptForGitOptions ? "1" : "0"]

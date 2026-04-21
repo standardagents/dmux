@@ -34,7 +34,38 @@ describe('PopupManager launchNewPanePopup', () => {
       data: { prompt: 'test prompt', baseBranch: 'develop', branchName: 'feat/LIN-1' },
     });
 
-    const result = await manager.launchNewPanePopup('/tmp/other-project');
+    const result = await manager.launchNewPanePopup('/tmp/project');
+
+    expect(manager.launchPopup).toHaveBeenCalledWith(
+      'newPanePopup.js',
+      ['/tmp/project', '1'],
+      expect.objectContaining({
+        title: '  ✨ New Pane — project  ',
+      }),
+      undefined,
+      '/tmp/project'
+    );
+    expect(result).toEqual({
+      prompt: 'test prompt',
+      baseBranch: 'develop',
+      branchName: 'feat/LIN-1',
+    });
+  });
+
+  it('uses selected project settings for git options prompt', async () => {
+    const manager = createPopupManager({ promptForGitOptionsOnCreate: false }) as any;
+    manager.checkPopupSupport = vi.fn(() => true);
+    manager.getSettingsManager = vi.fn((projectRoot?: string) => ({
+      getSettings: () => ({
+        promptForGitOptionsOnCreate: projectRoot === '/tmp/other-project',
+      }),
+    }));
+    manager.launchPopup = vi.fn().mockResolvedValue({
+      success: true,
+      data: { prompt: 'project prompt' },
+    });
+
+    await manager.launchNewPanePopup('/tmp/other-project');
 
     expect(manager.launchPopup).toHaveBeenCalledWith(
       'newPanePopup.js',
@@ -45,11 +76,6 @@ describe('PopupManager launchNewPanePopup', () => {
       undefined,
       '/tmp/other-project'
     );
-    expect(result).toEqual({
-      prompt: 'test prompt',
-      baseBranch: 'develop',
-      branchName: 'feat/LIN-1',
-    });
   });
 
   it('disables git options when caller requests allowGitOptions=false', async () => {
