@@ -23,12 +23,33 @@ describe('SettingsManager defaults', () => {
     expect(manager.getSettings()).toMatchObject({
       permissionMode: 'bypassPermissions',
       enableAutopilotByDefault: true,
+      promptForGitOptionsOnCreate: false,
       minPaneWidth: 50,
       maxPaneWidth: 80,
       enabledNotificationSounds: ['default-system-sound'],
       showFooterTips: true,
       colorTheme: 'orange',
     });
+  });
+
+  it('allows overriding promptForGitOptionsOnCreate at project scope', async () => {
+    vi.mock('fs', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('fs')>();
+      return {
+        ...actual,
+        existsSync: vi.fn(() => false),
+        readFileSync: vi.fn(),
+        writeFileSync: vi.fn(),
+        mkdirSync: vi.fn(),
+      };
+    });
+
+    const { SettingsManager } = await import('../src/utils/settingsManager.js');
+    const manager = new SettingsManager('/tmp/test-project');
+
+    manager.updateSetting('promptForGitOptionsOnCreate', true, 'project');
+    expect(manager.getSettings().promptForGitOptionsOnCreate).toBe(true);
+    expect(manager.getProjectSettings().promptForGitOptionsOnCreate).toBe(true);
   });
 
   it('allows overriding showFooterTips', async () => {

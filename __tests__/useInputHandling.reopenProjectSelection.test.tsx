@@ -50,6 +50,7 @@ function Harness({
   selectedIndex,
   projectActionItems,
   popupManager,
+  activeProjectRoot = '/repo-root',
   trackProjectActivity = vi.fn(async (work: () => unknown) => await work()),
   handleReopenWorktree = vi.fn(),
   setStatusMessage = vi.fn(),
@@ -58,6 +59,7 @@ function Harness({
   selectedIndex: number;
   projectActionItems: ProjectActionItem[];
   popupManager: any;
+  activeProjectRoot?: string;
   trackProjectActivity?: any;
   handleReopenWorktree?: any;
   setStatusMessage?: ReturnType<typeof vi.fn>;
@@ -116,6 +118,7 @@ function Harness({
     getAvailableAgentsForProject: vi.fn(() => []),
     panesFile: '/tmp/dmux.config.json',
     projectRoot: '/repo-root',
+    activeProjectRoot,
     projectActionItems,
     findCardInDirection: vi.fn(() => null),
   });
@@ -234,6 +237,7 @@ describe('useInputHandling reopen project selection', () => {
         selectedIndex={0}
         projectActionItems={projectActionItems}
         popupManager={popupManager}
+        activeProjectRoot="/repo-selected"
         trackProjectActivity={trackProjectActivity}
       />
     );
@@ -260,6 +264,46 @@ describe('useInputHandling reopen project selection', () => {
         filterQuery: '',
       },
       []
+    );
+
+    unmount();
+  });
+
+  it('opens project settings for the active project root', async () => {
+    const popupManager = {
+      launchSettingsPopup: vi.fn(async () => null),
+    };
+
+    const projectActionItems: ProjectActionItem[] = [
+      {
+        index: 0,
+        projectRoot: '/repo-selected',
+        projectName: 'repo-selected',
+        kind: 'new-agent',
+        hotkey: 'n',
+      },
+    ];
+
+    const { stdin, unmount } = render(
+      <Harness
+        selectedIndex={0}
+        projectActionItems={projectActionItems}
+        popupManager={popupManager}
+        activeProjectRoot="/repo-selected"
+      />
+    );
+
+    await sleep(20);
+    stdin.write('s');
+    await sleep(40);
+
+    expect(popupManager.launchSettingsPopup).toHaveBeenCalledWith(
+      expect.any(Function),
+      '/repo-selected',
+      [
+        { projectRoot: '/repo-root', projectName: 'repo-root' },
+        { projectRoot: '/repo-selected', projectName: 'repo-selected' },
+      ]
     );
 
     unmount();
@@ -310,6 +354,7 @@ describe('useInputHandling reopen project selection', () => {
         selectedIndex={0}
         projectActionItems={projectActionItems}
         popupManager={popupManager}
+        activeProjectRoot="/repo-selected"
         trackProjectActivity={trackProjectActivity}
         handleReopenWorktree={handleReopenWorktree}
       />

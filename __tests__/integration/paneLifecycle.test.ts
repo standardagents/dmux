@@ -16,7 +16,7 @@ import {
   addWorktree,
   type MockGitRepo,
 } from '../fixtures/integration/gitRepo.js';
-import { createMockExecSync, createMockOpenRouterAPI } from '../helpers/integration/mockCommands.js';
+import { createMockExecSync } from '../helpers/integration/mockCommands.js';
 
 const fsMock = vi.hoisted(() => ({
   readFileSync: vi.fn(() => JSON.stringify({ controlPaneId: '%0' })),
@@ -33,7 +33,7 @@ vi.mock('child_process', () => ({
 }));
 
 // Mock StateManager
-const mockGetPanes = vi.fn(() => []);
+const mockGetPanes = vi.fn((): DmuxPane[] => []);
 const mockSetPanes = vi.fn();
 const mockGetState = vi.fn(() => ({ projectRoot: '/test' }));
 const mockPauseConfigWatcher = vi.fn();
@@ -132,7 +132,7 @@ describe('Pane Lifecycle Integration Tests', () => {
     });
 
     // Configure mock execSync with test data
-    mockExecSync.mockImplementation((command: string, options?: any) => {
+    mockExecSync.mockImplementation(((command: string, options?: any) => {
       const cmd = command.toString().trim();
       const encoding = options?.encoding;
 
@@ -203,12 +203,17 @@ describe('Pane Lifecycle Integration Tests', () => {
         );
       }
 
+      // Branch existence checks for new-worktree branch creation.
+      // Default to "missing" so createPane uses -b path unless a test overrides behavior.
+      if (cmd.includes('show-ref --verify --quiet')) {
+        throw new Error('branch not found');
+      }
+
       // Git symbolic-ref (main branch)
       if (cmd.includes('symbolic-ref')) {
         return returnValue('refs/heads/main');
       }
 
-      // Git rev-parse (current branch)
       if (cmd.includes('rev-parse --git-common-dir')) {
         return returnValue('.git');
       }
@@ -217,13 +222,18 @@ describe('Pane Lifecycle Integration Tests', () => {
         return returnValue('/test');
       }
 
+      if (cmd.includes('rev-parse --verify')) {
+        return returnValue('abc123');
+      }
+
+      // Git rev-parse (current branch)
       if (cmd.includes('rev-parse')) {
         return returnValue('main');
       }
 
       // Default
       return returnValue('');
-    });
+    }) as any);
 
     // Configure StateManager mock
     mockGetPanes.mockReturnValue([]);
@@ -482,7 +492,6 @@ describe('Pane Lifecycle Integration Tests', () => {
         },
         ['claude']
       );
-
       const splitCall = mockExecSync.mock.calls.find(([cmd]) =>
         typeof cmd === 'string' && cmd.includes('tmux split-window')
       );
@@ -491,6 +500,108 @@ describe('Pane Lifecycle Integration Tests', () => {
       if ('pane' in result) {
         expect(result.pane.hidden).toBe(false);
       }
+    });
+
+    it('should pass branch and base overrides to the pane bootstrap runner', async () => {
+      const { createPane } = await import('../../src/utils/paneCreation.js');
+
+      await createPane(
+        {
+          prompt: 'work on ticket',
+          agent: 'claude',
+          projectName: 'test-project',
+          existingPanes: [],
+          branchNameOverride: 'feat/LIN-123-fix-auth',
+          baseBranchOverride: 'develop',
+        },
+        ['claude']
+      );
+
+      const bootstrapConfig = getLatestBootstrapConfig();
+      expect(bootstrapConfig.worktreePath).toBe('/test/.dmux/worktrees/feat-lin-123-fix-auth');
+      expect(bootstrapConfig.branchName).toBe('feat/LIN-123-fix-auth');
+      expect(bootstrapConfig.resolvedStartPoint).toBe('develop');
+      expect(bootstrapConfig.pane.branchName).toBe('feat/LIN-123-fix-auth');
+    });
+
+    it('should append agent suffix for explicit branch overrides', async () => {
+      const { createPane } = await import('../../src/utils/paneCreation.js');
+
+      await createPane(
+        {
+          prompt: 'A/B compare fix',
+          agent: 'claude',
+          projectName: 'test-project',
+          existingPanes: [],
+          branchNameOverride: 'feat/LIN-777-ab-test',
+          slugSuffix: 'opencode',
+        },
+        ['claude']
+      );
+
+      const bootstrapConfig = getLatestBootstrapConfig();
+      expect(bootstrapConfig.worktreePath).toBe('/test/.dmux/worktrees/feat-lin-777-ab-test-opencode');
+      expect(bootstrapConfig.branchName).toBe('feat/LIN-777-ab-test-opencode');
+      expect(bootstrapConfig.pane.branchName).toBe('feat/LIN-777-ab-test-opencode');
+    });
+
+    it('should fail early when target worktree path already exists', async () => {
+      const { createPane } = await import('../../src/utils/paneCreation.js');
+
+      fsMock.existsSync.mockImplementation((targetPath: string) => {
+        const value = String(targetPath);
+        if (value === '/test/.dmux/worktrees/feat-lin-999-existing') {
+          return true;
+        }
+        return !value.includes('.dmux/worktrees/');
+      });
+
+      await expect(
+        createPane(
+          {
+            prompt: 'collision test',
+            agent: 'claude',
+            projectName: 'test-project',
+            existingPanes: [],
+            branchNameOverride: 'feat/LIN-999-existing',
+          },
+          ['claude']
+        )
+      ).rejects.toThrow('Worktree path already exists');
+    });
+
+    it('should reject invalid branch-name overrides', async () => {
+      const { createPane } = await import('../../src/utils/paneCreation.js');
+
+      await expect(
+        createPane(
+          {
+            prompt: 'invalid branch override',
+            agent: 'claude',
+            projectName: 'test-project',
+            existingPanes: [],
+            branchNameOverride: 'feat/../bad',
+          },
+          ['claude']
+        )
+      ).rejects.toThrow('Invalid branch name override');
+    });
+
+    it('should reject invalid base-branch overrides', async () => {
+      const { createPane } = await import('../../src/utils/paneCreation.js');
+
+      await expect(
+        createPane(
+          {
+            prompt: 'invalid base override',
+            agent: 'claude',
+            projectName: 'test-project',
+            existingPanes: [],
+            baseBranchOverride: 'dev..bad',
+          },
+          ['claude']
+        )
+      ).rejects.toThrow('Invalid base branch override');
     });
 
     it('should destroy the welcome pane when tracked shell panes make the pane list non-empty', async () => {
@@ -699,6 +810,7 @@ describe('Pane Lifecycle Integration Tests', () => {
       };
 
       const mockContext: ActionContext = {
+        sessionName: 'dmux-test',
         projectName: 'test-project',
         panes: [testPane],
         savePanes: vi.fn(),
@@ -730,6 +842,7 @@ describe('Pane Lifecycle Integration Tests', () => {
       };
 
       const mockContext: ActionContext = {
+        sessionName: 'dmux-test',
         projectName: 'test-project',
         panes: [testPane],
         savePanes: vi.fn(),
@@ -763,6 +876,7 @@ describe('Pane Lifecycle Integration Tests', () => {
       };
 
       const mockContext: ActionContext = {
+        sessionName: 'dmux-test',
         projectName: 'test-project',
         panes: [testPane],
         savePanes: vi.fn(),
@@ -800,6 +914,7 @@ describe('Pane Lifecycle Integration Tests', () => {
       };
 
       const mockContext: ActionContext = {
+        sessionName: 'dmux-test',
         projectName: 'test-project',
         panes: [testPane],
         savePanes: vi.fn(),
@@ -831,6 +946,7 @@ describe('Pane Lifecycle Integration Tests', () => {
       };
 
       const mockContext: ActionContext = {
+        sessionName: 'dmux-test',
         projectName: 'test-project',
         panes: [testPane],
         savePanes: vi.fn(),

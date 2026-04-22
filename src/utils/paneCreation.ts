@@ -17,13 +17,11 @@ import { triggerHook } from './hooks.js';
 import { TMUX_SPLIT_DELAY } from '../constants/timing.js';
 import { atomicWriteJsonSync } from './atomicWrite.js';
 import { LogService } from '../services/LogService.js';
-import {
-  appendSlugSuffix,
-  type AgentName,
-} from './agentLaunch.js';
+import type { AgentName } from './agentLaunch.js';
 import { getPaneTmuxTitle } from './paneTitle.js';
 import { shellQuote } from './promptStore.js';
-import { isValidBranchName } from './git.js';
+import { isValidBranchName, isValidFullBranchName } from './git.js';
+import { resolvePaneNaming } from './paneNaming.js';
 import { readWorktreeMetadata } from './worktreeMetadata.js';
 import { resolveProjectColorTheme } from './paneColors.js';
 import type { SidebarProject } from '../types.js';
@@ -38,6 +36,8 @@ export interface CreatePaneOptions {
   agent?: AgentName;
   slugSuffix?: string;
   slugBase?: string;
+  baseBranchOverride?: string;
+  branchNameOverride?: string;
   existingWorktree?: {
     slug: string;
     worktreePath: string;
@@ -161,6 +161,8 @@ export async function createPane(
     existingPanes,
     slugSuffix,
     slugBase,
+    baseBranchOverride,
+    branchNameOverride,
     existingWorktree,
     startPointBranch,
     mergeTargetChain,
@@ -247,20 +249,41 @@ export async function createPane(
     throw new Error(`Invalid branch prefix: ${branchPrefix}`);
   }
 
-  // Generate slug (filesystem-safe directory name) and branch name (may include prefix).
+  const overrideBranchName = (branchNameOverride || '').trim();
+  if (overrideBranchName && !isValidFullBranchName(overrideBranchName)) {
+    throw new Error(`Invalid branch name override: ${overrideBranchName}`);
+  }
+
+  const overrideBaseBranch = (baseBranchOverride || '').trim();
+  if (overrideBaseBranch && !isValidFullBranchName(overrideBaseBranch)) {
+    throw new Error(`Invalid base branch override: ${overrideBaseBranch}`);
+  }
+
+  // Generate slug/worktree + branch names.
+  // Explicit branch name override takes precedence over branchPrefix.
   const generatedSlug = existingWorktree
     ? existingWorktree.slug
     : (slugBase || await generateSlug(prompt));
-  const slug = existingWorktree
-    ? existingWorktree.slug
-    : appendSlugSuffix(generatedSlug, slugSuffix);
-  const branchName = existingWorktree
-    ? existingWorktree.branchName
-    : (branchPrefix ? `${branchPrefix}${slug}` : slug);
+  const naming = resolvePaneNaming({
+    generatedSlug,
+    slugSuffix,
+    branchPrefix,
+    baseBranchSetting: settings.baseBranch,
+    baseBranchOverride: overrideBaseBranch,
+    branchNameOverride: overrideBranchName,
+  });
+  const slug = existingWorktree ? existingWorktree.slug : naming.slug;
+  const branchName = existingWorktree ? existingWorktree.branchName : naming.branchName;
+  const effectiveBaseBranch = naming.baseBranch;
   const tmuxService = TmuxService.getInstance();
 
   const worktreePath = existingWorktree?.worktreePath
     || path.join(projectRoot, '.dmux', 'worktrees', slug);
+  if (!existingWorktree && fs.existsSync(worktreePath)) {
+    throw new Error(
+      `Worktree path already exists: ${worktreePath}. Choose a different branch/worktree name.`
+    );
+  }
   const originalPaneId = tmuxService.getCurrentPaneIdSync();
   let currentWindowPaneIds = getCurrentWindowPaneIds(tmuxService);
 
@@ -430,11 +453,7 @@ export async function createPane(
   );
 
   // Validate branch settings before handing the slow setup work to the pane.
-  const baseBranch = settings.baseBranch || '';
-  if (baseBranch && !isValidBranchName(baseBranch)) {
-    throw new Error(`Invalid base branch name: ${baseBranch}`);
-  }
-  const resolvedStartPoint = startPointBranch || baseBranch || undefined;
+  const resolvedStartPoint = startPointBranch || effectiveBaseBranch || undefined;
   if (resolvedStartPoint && !isValidBranchName(resolvedStartPoint)) {
     throw new Error(`Invalid worktree start-point branch name: ${resolvedStartPoint}`);
   }

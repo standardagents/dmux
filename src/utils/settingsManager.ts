@@ -71,6 +71,10 @@ function sanitizeLoadedSettings(value: unknown): DmuxSettings {
     sanitized.enableAutopilotByDefault = parsed.enableAutopilotByDefault;
   }
 
+  if (typeof parsed.promptForGitOptionsOnCreate === 'boolean') {
+    sanitized.promptForGitOptionsOnCreate = parsed.promptForGitOptionsOnCreate;
+  }
+
   if (
     typeof parsed.defaultAgent === 'string'
     && (parsed.defaultAgent === '' || isAgentName(parsed.defaultAgent))
@@ -143,6 +147,7 @@ const DEFAULT_SETTINGS: DmuxSettings = {
   // Most permissive defaults for new dmux setups.
   permissionMode: 'bypassPermissions',
   enableAutopilotByDefault: true,
+  promptForGitOptionsOnCreate: false,
   minPaneWidth: DEFAULT_MIN_PANE_WIDTH,
   maxPaneWidth: DEFAULT_MAX_PANE_WIDTH,
   enabledAgents: getDefaultEnabledAgents(),
@@ -238,6 +243,12 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       { value: 'fix/', label: 'fix/' },
       { value: 'chore/', label: 'chore/' },
     ],
+  },
+  {
+    key: 'promptForGitOptionsOnCreate',
+    label: 'Ask Git Options on Create',
+    description: 'When enabled, new-pane popup asks for optional base branch and branch/worktree name overrides.',
+    type: 'boolean',
   },
   {
     key: 'minPaneWidth',

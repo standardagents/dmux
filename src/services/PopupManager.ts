@@ -16,6 +16,7 @@ import {
 import type {
   DmuxPane,
   DmuxThemeName,
+  NewPaneInput,
   ProjectSettings,
   SettingDefinition,
   SidebarProject,
@@ -79,6 +80,10 @@ interface MergeUncommittedChoiceData {
   targetBranch: string
   files: string[]
   diffMode?: "working-tree" | "target-branch"
+}
+
+interface LaunchNewPanePopupOptions {
+  allowGitOptions?: boolean;
 }
 
 function isMergeUncommittedChoiceData(
@@ -319,15 +324,48 @@ export class PopupManager {
     return null
   }
 
-  async launchNewPanePopup(projectPath?: string): Promise<string | null> {
+  private normalizeNewPaneInput(data: unknown): NewPaneInput | null {
+    if (typeof data === "string") {
+      return { prompt: data }
+    }
+
+    if (!data || typeof data !== "object") {
+      return null
+    }
+
+    const candidate = data as Record<string, unknown>
+    if (typeof candidate.prompt !== "string") {
+      return null
+    }
+
+    const normalized: NewPaneInput = { prompt: candidate.prompt }
+    if (typeof candidate.baseBranch === "string") {
+      const value = candidate.baseBranch.trim()
+      if (value) normalized.baseBranch = value
+    }
+    if (typeof candidate.branchName === "string") {
+      const value = candidate.branchName.trim()
+      if (value) normalized.branchName = value
+    }
+
+    return normalized
+  }
+
+  async launchNewPanePopup(
+    projectPath?: string,
+    options: LaunchNewPanePopupOptions = {}
+  ): Promise<NewPaneInput | null> {
     if (!this.checkPopupSupport()) return null
 
     try {
       const popupHeight = Math.floor(this.config.terminalHeight * 0.8)
-      const popupArgs = projectPath ? [projectPath] : []
       const effectivePath = projectPath || this.config.projectRoot
+      const settings = this.getSettingsManager(effectivePath).getSettings()
+      const shouldPromptForGitOptions =
+        (settings.promptForGitOptionsOnCreate ?? false) && (options.allowGitOptions ?? true)
+      const popupArgs = [effectivePath, shouldPromptForGitOptions ? "1" : "0"]
       const projectName = effectivePath ? path.basename(effectivePath) : "dmux"
-      const result = await this.launchPopup<string>(
+      const result = await this.launchPopup<unknown>(
         "newPanePopup.js",
         popupArgs,
         {
@@ -341,7 +379,8 @@ export class PopupManager {
       )
 
       this.ignoreInputBriefly()
-      return this.handleResult(result)
+      const data = this.handleResult(result)
+      return this.normalizeNewPaneInput(data)
     } catch (error: any) {
       this.showTempMessage(`Failed to launch popup: ${error.message}`)
       return null

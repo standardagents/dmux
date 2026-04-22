@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getPaneBranchName, isValidBranchName } from '../src/utils/git.js';
+import { getPaneBranchName, isValidBranchName, isValidFullBranchName } from '../src/utils/git.js';
 
 // ─── Test 1 & 2: getPaneBranchName, slug/branchName separation ───
 
@@ -80,6 +80,22 @@ describe('isValidBranchName', () => {
     expect(isValidBranchName('refs/../../etc')).toBe(false);
     expect(isValidBranchName('foo/../bar')).toBe(false);
     expect(isValidBranchName('..')).toBe(false);
+  });
+});
+
+describe('isValidFullBranchName', () => {
+  it('accepts complete branch names', () => {
+    expect(isValidFullBranchName('main')).toBe(true);
+    expect(isValidFullBranchName('feat/fix-auth')).toBe(true);
+    expect(isValidFullBranchName('release/2026.02')).toBe(true);
+  });
+
+  it('rejects prefixes and path-like edge cases', () => {
+    expect(isValidFullBranchName('feat/')).toBe(false);
+    expect(isValidFullBranchName('.')).toBe(false);
+    expect(isValidFullBranchName('.hidden')).toBe(false);
+    expect(isValidFullBranchName('refs/heads.lock')).toBe(false);
+    expect(isValidFullBranchName('-bad')).toBe(false);
   });
 });
 

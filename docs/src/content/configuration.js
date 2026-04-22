@@ -92,6 +92,15 @@ export function render() {
       </tbody>
     </table>
 
+    <h3><code>promptForGitOptionsOnCreate</code></h3>
+    <table>
+      <tbody>
+        <tr><td><strong>Type</strong></td><td><code>boolean</code></td></tr>
+        <tr><td><strong>Default</strong></td><td><code>false</code></td></tr>
+        <tr><td><strong>Description</strong></td><td>When enabled, the new-pane popup asks for optional create-time overrides for base branch and branch/worktree name. Base branch override must match an existing local branch (suggested in most-recently-committed order). These per-pane overrides take precedence over <code>baseBranch</code> and <code>branchPrefix</code>.</td></tr>
+      </tbody>
+    </table>
+
     <h3><code>minPaneWidth</code></h3>
     <table>
       <tbody>
@@ -126,6 +135,7 @@ export function render() {
   "useTmuxHooks": false,
   "baseBranch": "develop",
   "branchPrefix": "feat/",
+  "promptForGitOptionsOnCreate": true,
   "minPaneWidth": 50,
   "maxPaneWidth": 80
 }</code></pre>

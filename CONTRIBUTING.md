@@ -65,6 +65,25 @@ pnpm run dev:bootstrap
 
 Use `pnpm run hooks:install-local -- --force` to overwrite existing hook files.
 
+## E2E Test Suite
+
+dmux includes tmux-driven end-to-end tests under `__tests__/dmux.e2e.*.test.ts`.
+
+- E2E tests are opt-in and skipped by default.
+- They require `tmux` plus a runnable dmux entrypoint (`dist/index.js`, `pnpm`, or `tsx`).
+
+Run all e2e tests:
+
+```bash
+DMUX_E2E=1 pnpm exec vitest --run __tests__/dmux.e2e.*.test.ts
+```
+
+Run one e2e file:
+
+```bash
+DMUX_E2E=1 pnpm exec vitest --run __tests__/dmux.e2e.create-pane.test.ts
+```
+
 ## Pull Request Workflow
 
 1. One pane/worktree per PR branch.

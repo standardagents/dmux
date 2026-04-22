@@ -44,6 +44,31 @@ export function isValidBranchName(name: string): boolean {
 }
 
 /**
+ * Validate a complete branch name for create-time overrides.
+ *
+ * isValidBranchName intentionally accepts branch-prefix values such as "feat/".
+ * Overrides must be complete refs because they are used directly in git worktree
+ * commands and to derive a worktree directory.
+ */
+export function isValidFullBranchName(name: string): boolean {
+  if (!isValidBranchName(name)) return false;
+  if (!name) return false;
+  if (name === '@' || name === '.') return false;
+  if (name.startsWith('-') || name.startsWith('/') || name.endsWith('/')) return false;
+  if (name.endsWith('.') || name.includes('//') || name.includes('@{')) return false;
+
+  return name
+    .split('/')
+    .every((part) =>
+      part.length > 0
+      && part !== '.'
+      && part !== '..'
+      && !part.startsWith('.')
+      && !part.endsWith('.lock')
+    );
+}
+
+/**
  * Detects the main/master branch name for the repository (async version)
  * Uses Promise.any for efficient fallback - first successful result wins
  */

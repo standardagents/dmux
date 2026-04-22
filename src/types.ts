@@ -128,10 +128,18 @@ export interface DmuxSettings {
   baseBranch?: string;
   // Prefix for branch names (e.g. 'feat/' produces 'feat/fix-auth')
   branchPrefix?: string;
+  // Whether new pane popup should ask for base/branch overrides
+  promptForGitOptionsOnCreate?: boolean;
   // Preferred minimum content pane width in characters
   minPaneWidth?: number;
   // Preferred maximum content pane width in characters
   maxPaneWidth?: number;
+}
+
+export interface NewPaneInput {
+  prompt: string;
+  baseBranch?: string;
+  branchName?: string;
 }
 
 export type SettingsScope = 'global' | 'project';

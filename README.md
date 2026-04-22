@@ -55,6 +55,15 @@ dmux creates a tmux pane for each task. Every pane gets its own git worktree and
 - **Multi-project** &mdash; add multiple repos to the same session
 - **Lifecycle hooks** &mdash; run scripts on worktree create, pre-merge, post-merge, and more
 
+## Git Branch Controls
+
+dmux can use default branch behavior or let you override branch details when creating a pane.
+
+- Keep the default flow for fast creation, where dmux automatically picks the worktree and git branch names.
+- Optionally choose a different base branch per pane.
+- Optionally provide an explicit branch/worktree name (useful for issue-tracker ticket naming).
+- Multi-agent launches still use shared naming with agent-specific suffixes.
+
 ## Keyboard Shortcuts
 
 | Key | Action |
