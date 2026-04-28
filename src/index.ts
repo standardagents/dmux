@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import fs from 'fs/promises';
 import * as fsSync from 'fs';
 import path from 'path';
+import os from 'os';
 import { render } from 'ink';
 import React from 'react';
 import { createHash } from 'crypto';
@@ -1145,7 +1146,7 @@ class Dmux {
     const dmuxDir = path.join(this.projectRoot, '.dmux');
     const newConfigFile = path.join(dmuxDir, 'dmux.config.json');
     const oldParentConfigFile = path.join(path.dirname(this.projectRoot), 'dmux.config.json');
-    const homeDmuxDir = path.join(process.env.HOME!, '.dmux');
+    const homeDmuxDir = path.join(process.env.HOME || os.homedir(), '.dmux');
 
     if (this.panesFile === newConfigFile && !await this.fileExists(newConfigFile)) {
       // Look for old config files to migrate
