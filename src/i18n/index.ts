@@ -1,14 +1,13 @@
 /**
  * Internationalization (i18n) module for dmux
- * Provides multi-language support with translation files
+ *
+ * Translations are bundled as TypeScript modules (no fs/JSON at runtime).
+ * This keeps published builds self-contained and avoids fs side effects
+ * for non-UI consumers (e.g. SettingsManager) and tests.
  */
 
-import { readFileSync, readdirSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import en from './locales/en.js';
+import ja from './locales/ja.js';
 
 export type Locale = 'en' | 'ja';
 
@@ -16,109 +15,68 @@ export interface Translations {
   [key: string]: string | Translations;
 }
 
+const TRANSLATIONS: Record<Locale, Translations> = {
+  en,
+  ja,
+};
+
+const LOCALE_LABELS: Array<{ value: Locale; label: string }> = [
+  { value: 'en', label: 'English' },
+  { value: 'ja', label: '日本語' },
+];
+
 class I18nManager {
   private currentLocale: Locale = 'en';
-  private translations: Map<Locale, Translations> = new Map();
   private fallbackLocale: Locale = 'en';
 
-  constructor() {
-    this.loadTranslations();
-  }
-
-  private loadTranslations(): void {
-    try {
-      const localesDir = join(__dirname, 'locales');
-      const files = readdirSync(localesDir).filter(f => f.endsWith('.json'));
-      
-      for (const file of files) {
-        const locale = file.replace('.json', '') as Locale;
-        const filePath = join(localesDir, file);
-        const translations = JSON.parse(readFileSync(filePath, 'utf-8'));
-        this.translations.set(locale, translations);
-      }
-    } catch (error) {
-      console.error('Failed to load translations:', error);
+  setLocale(locale: Locale): void {
+    if (locale in TRANSLATIONS) {
+      this.currentLocale = locale;
     }
   }
 
-  /**
-   * Set the current locale
-   */
-  setLocale(locale: Locale): void {
-    this.currentLocale = locale;
-  }
-
-  /**
-   * Get the current locale
-   */
   getLocale(): Locale {
     return this.currentLocale;
   }
 
-  /**
-   * Get available locales
-   */
   getAvailableLocales(): Array<{ value: Locale; label: string }> {
-    return [
-      { value: 'en', label: 'English' },
-      { value: 'ja', label: '日本語' },
-    ];
+    return LOCALE_LABELS.slice();
   }
 
-  /**
-   * Translate a key to the current locale
-   * @param key - Dot-notation key (e.g., 'settings.title')
-   * @param params - Optional parameters for interpolation
-   */
   t(key: string, params?: Record<string, string | number>): string {
-    const keys = key.split('.');
-    let value: string | Translations | undefined = this.translations.get(this.currentLocale);
+    const resolved =
+      this.lookup(this.currentLocale, key) ??
+      this.lookup(this.fallbackLocale, key);
 
-    // Navigate through nested keys
-    for (const k of keys) {
-      if (value && typeof value === 'object' && k in value) {
-        value = value[k];
-      } else {
-        value = undefined;
-        break;
-      }
-    }
-
-    // If not found, try fallback locale
-    if (value === undefined) {
-      value = this.translations.get(this.fallbackLocale);
-      for (const k of keys) {
-        if (value && typeof value === 'object' && k in value) {
-          value = value[k];
-        } else {
-          value = undefined;
-          break;
-        }
-      }
-    }
-
-    // If still not found, return the key itself
-    if (typeof value !== 'string') {
+    if (typeof resolved !== 'string') {
       return key;
     }
 
-    // Interpolate parameters if provided
     if (params) {
-      return value.replace(/\{(\w+)\}/g, (match, paramName) => {
-        return params[paramName] !== undefined ? String(params[paramName]) : match;
-      });
+      return resolved.replace(/\{(\w+)\}/g, (match, paramName) =>
+        params[paramName] !== undefined ? String(params[paramName]) : match
+      );
     }
 
-    return value;
+    return resolved;
+  }
+
+  private lookup(locale: Locale, key: string): string | undefined {
+    let value: string | Translations | undefined = TRANSLATIONS[locale];
+    for (const segment of key.split('.')) {
+      if (value && typeof value === 'object' && segment in value) {
+        value = (value as Translations)[segment];
+      } else {
+        return undefined;
+      }
+    }
+    return typeof value === 'string' ? value : undefined;
   }
 }
 
-// Singleton instance
 const i18n = new I18nManager();
-
 export default i18n;
 
-// Convenience function
 export function t(key: string, params?: Record<string, string | number>): string {
   return i18n.t(key, params);
 }
