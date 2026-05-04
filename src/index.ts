@@ -658,7 +658,7 @@ class Dmux {
     const projectName = path.basename(projectRoot);
     const projectHash = createHash('md5').update(projectRoot).digest('hex').substring(0, 8);
     const projectIdentifier = `${projectName}-${projectHash}`;
-    const sanitizedProjectIdentifier = projectIdentifier.replace(/\./g, '-');
+    const sanitizedProjectIdentifier = projectIdentifier.replace(/[^a-zA-Z0-9_-]+/g, '-');
     return `dmux-${sanitizedProjectIdentifier}`;
   }
 
