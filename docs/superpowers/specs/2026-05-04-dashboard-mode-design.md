@@ -201,7 +201,7 @@ Dashboard actions use a leader key prefix: `Ctrl+\` (ASCII 28 in raw mode — sa
 |----------|--------|---------|
 | `Ctrl+\ m` | Toggle dashboard mode | Switches between grid mode and wheel mode |
 | `Ctrl+\ a` | Jump to next attention-flagged pane | Cycles through panes with `needsAttention: true`. In dashboard mode: expands flagged pane into next free wheel slot. Outside dashboard mode: navigates sidebar selection to next flagged pane. |
-| `Ctrl+\ 1`..`9` | Select project panes | Selects all active (non-minimized) panes belonging to the Nth project in the sidebar. Useful for bulk operations on a project group. |
+| `Ctrl+\ 1`..`9` | Toggle project panes | Toggles visibility of the Nth project's panes. If any are expanded, minimize all. If all are minimized, restore them to wheel slots. Useful for quickly focusing on or dismissing an entire project group. |
 
 ## State Transitions
 
