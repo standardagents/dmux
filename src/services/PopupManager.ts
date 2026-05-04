@@ -11,6 +11,7 @@ import { LogService } from "./LogService.js"
 import { TmuxService } from "./TmuxService.js"
 import {
   DEFAULT_COLOR_THEME_SETTING_KEY,
+  getLocalizedSettingDefinitions,
   SETTING_DEFINITIONS,
 } from "../utils/settingsManager.js"
 import type {
@@ -693,10 +694,11 @@ export class PopupManager {
         resolvedProjectRoot,
         sidebarProjects
       )
-      const colorThemeSettingIndex = SETTING_DEFINITIONS.findIndex(
+      const localizedDefinitions = getLocalizedSettingDefinitions()
+      const colorThemeSettingIndex = localizedDefinitions.findIndex(
         (definition) => definition.key === "colorTheme"
       )
-      const settingDefinitions: SettingDefinition[] = SETTING_DEFINITIONS
+      const settingDefinitions: SettingDefinition[] = localizedDefinitions
         .filter((definition) => definition.key !== "colorTheme")
 
       const defaultColorThemeSetting: SettingDefinition = {

@@ -24,6 +24,7 @@ import {
   isNotificationSoundId,
   type NotificationSoundId,
 } from './notificationSounds.js';
+import { t } from '../i18n/index.js';
 import {
   DEFAULT_DMUX_THEME,
   DMUX_THEME_NAMES,
@@ -33,8 +34,13 @@ import {
 const GLOBAL_SETTINGS_PATH = join(homedir(), '.dmux.global.json');
 const TEAM_DEFAULTS_FILENAME = '.dmux.defaults.json';
 const PERMISSION_MODES = ['', 'plan', 'acceptEdits', 'bypassPermissions'] as const;
+const LANGUAGE_OPTIONS = ['en', 'ja'] as const;
 function isPermissionMode(value: string): value is NonNullable<DmuxSettings['permissionMode']> {
   return (PERMISSION_MODES as readonly string[]).includes(value);
+}
+
+function isLanguage(value: string): value is NonNullable<DmuxSettings['language']> {
+  return (LANGUAGE_OPTIONS as readonly string[]).includes(value);
 }
 
 function isValidMaxPaneWidth(value: unknown): value is number {
@@ -103,6 +109,10 @@ function sanitizeLoadedSettings(value: unknown): DmuxSettings {
     sanitized.colorTheme = parsed.colorTheme;
   }
 
+  if (typeof parsed.language === 'string' && isLanguage(parsed.language)) {
+    sanitized.language = parsed.language;
+  }
+
   if (typeof parsed.useTmuxHooks === 'boolean') {
     sanitized.useTmuxHooks = parsed.useTmuxHooks;
   }
@@ -153,6 +163,7 @@ const DEFAULT_SETTINGS: DmuxSettings = {
   enabledAgents: getDefaultEnabledAgents(),
   enabledNotificationSounds: getDefaultNotificationSoundSelection(),
   showFooterTips: true,
+  language: 'en',
   colorTheme: DEFAULT_DMUX_THEME,
 };
 
@@ -163,7 +174,101 @@ const AGENT_OPTIONS = getAgentDefinitions().map((agent) => ({
 
 export const DEFAULT_COLOR_THEME_SETTING_KEY = 'defaultColorTheme';
 
+const LOCALIZED_SETTING_TRANSLATIONS: Partial<
+  Record<
+    string,
+    {
+      label: string;
+      description: string;
+      optionLabels?: Record<string, string>;
+    }
+  >
+> = {
+  language: {
+    label: 'settings.language',
+    description: 'settings.languageDescription',
+  },
+  permissionMode: {
+    label: 'settings.permissionMode',
+    description: 'settings.permissionModeDescription',
+    optionLabels: {
+      '': 'settings.permissionModeDefault',
+      plan: 'settings.permissionModePlan',
+      acceptEdits: 'settings.permissionModeAcceptEdits',
+      bypassPermissions: 'settings.permissionModeBypassPermissions',
+    },
+  },
+  enableAutopilotByDefault: {
+    label: 'settings.enableAutopilot',
+    description: 'settings.enableAutopilotDescription',
+  },
+  defaultAgent: {
+    label: 'settings.defaultAgent',
+    description: 'settings.defaultAgentDescription',
+    optionLabels: {
+      '': 'settings.defaultAgentAsk',
+    },
+  },
+  enabledAgents: {
+    label: 'settings.enabledAgents',
+    description: 'settings.enabledAgentsDescription',
+  },
+  enabledNotificationSounds: {
+    label: 'settings.notificationSounds',
+    description: 'settings.notificationSoundsDescription',
+  },
+  showFooterTips: {
+    label: 'settings.showFooterTips',
+    description: 'settings.showFooterTipsDescription',
+  },
+  colorTheme: {
+    label: 'settings.colorTheme',
+    description: 'settings.colorThemeDescription',
+  },
+  useTmuxHooks: {
+    label: 'settings.useTmuxHooks',
+    description: 'settings.useTmuxHooksDescription',
+  },
+  baseBranch: {
+    label: 'settings.baseBranch',
+    description: 'settings.baseBranchDescription',
+  },
+  branchPrefix: {
+    label: 'settings.branchPrefix',
+    description: 'settings.branchPrefixDescription',
+    optionLabels: {
+      '': 'settings.noPrefix',
+    },
+  },
+  promptForGitOptionsOnCreate: {
+    label: 'settings.promptForGitOptionsOnCreate',
+    description: 'settings.promptForGitOptionsOnCreateDescription',
+  },
+  minPaneWidth: {
+    label: 'settings.minPaneWidth',
+    description: 'settings.minPaneWidthDescription',
+  },
+  maxPaneWidth: {
+    label: 'settings.maxPaneWidth',
+    description: 'settings.maxPaneWidthDescription',
+  },
+  hooks: {
+    label: 'settings.manageHooks',
+    description: 'settings.manageHooksDescription',
+  },
+};
+
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
+  {
+    key: 'language',
+    label: 'Language',
+    description: 'Select the display language for dmux',
+    type: 'select',
+    options: [
+      { value: 'en', label: 'English' },
+      { value: 'ja', label: '日本語' },
+    ],
+  },
   {
     key: 'permissionMode',
     label: 'Agent Permission Mode',
@@ -277,6 +382,33 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     type: 'action' as any,
   },
 ];
+
+/**
+ * Get localized setting definitions using i18n
+ * Returns a new array with translated labels and descriptions.
+ */
+export function getLocalizedSettingDefinitions(): SettingDefinition[] {
+  return SETTING_DEFINITIONS.map((definition) => {
+    const translation = LOCALIZED_SETTING_TRANSLATIONS[definition.key];
+    const localized: SettingDefinition = {
+      ...definition,
+      label: translation ? t(translation.label) : definition.label,
+      description: translation ? t(translation.description) : definition.description,
+    };
+
+    if (definition.options) {
+      localized.options = definition.options.map((option) => {
+        const optionKey = translation?.optionLabels?.[option.value];
+        return {
+          ...option,
+          label: optionKey ? t(optionKey) : option.label,
+        };
+      });
+    }
+
+    return localized;
+  });
+}
 
 export class SettingsManager {
   private globalPath: string;
@@ -408,6 +540,9 @@ export class SettingsManager {
     if (key === 'permissionMode' && typeof value === 'string' && !isPermissionMode(value)) {
       throw new Error(`Invalid permissionMode: "${value}"`);
     }
+    if (key === 'language' && (typeof value !== 'string' || !isLanguage(value))) {
+      throw new Error(`Invalid language: "${String(value)}"`);
+    }
     if (key === 'colorTheme' && !isDmuxThemeName(value)) {
       throw new Error(`Invalid colorTheme: "${String(value)}"`);
     }
@@ -483,6 +618,9 @@ export class SettingsManager {
   updateSettings(settings: Partial<DmuxSettings>, scope: SettingsScope): void {
     if (typeof settings.permissionMode === 'string' && !isPermissionMode(settings.permissionMode)) {
       throw new Error(`Invalid permissionMode: "${settings.permissionMode}"`);
+    }
+    if (settings.language !== undefined && !isLanguage(settings.language)) {
+      throw new Error(`Invalid language: "${String(settings.language)}"`);
     }
     if (settings.colorTheme !== undefined && !isDmuxThemeName(settings.colorTheme)) {
       throw new Error(`Invalid colorTheme: "${String(settings.colorTheme)}"`);

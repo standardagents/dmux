@@ -66,6 +66,7 @@ import {
   getNextFooterTipIndex,
   getRandomFooterTipIndex,
 } from "./utils/footerTips.js"
+import { setLocale, t, type Locale } from "./i18n/index.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -144,6 +145,12 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   const paneTitleLabelCacheRef = useRef(new Map<string, string>())
   const paneActiveBorderStyleCacheRef = useRef(new Map<string, string>())
   const paneTitleSpinnerFrameRef = useRef(0)
+
+  // Apply i18n language reactively when the locale setting changes.
+  useEffect(() => {
+    const language = settings.language || 'en'
+    setLocale(language as Locale)
+  }, [settings.language])
 
   // Dialog state management
   const dialogState = useDialogState()
@@ -984,23 +991,23 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
       options: [
         {
           id: "commit_automatic",
-          label: "AI commit (automatic)",
+          label: t("commit.aiCommitAuto"),
           description: "Auto-generate and commit immediately",
           default: true,
         },
         {
           id: "commit_ai_editable",
-          label: "AI commit (editable)",
+          label: t("commit.aiCommitEditable"),
           description: "Generate message, edit before commit",
         },
         {
           id: "commit_manual",
-          label: "Manual commit message",
+          label: t("commit.manualCommit"),
           description: "Write your own commit message",
         },
         {
           id: "cancel",
-          label: "Cancel",
+          label: t("commit.cancel"),
           description: "Keep working in the parent worktree",
         },
       ],

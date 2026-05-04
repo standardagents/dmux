@@ -28,8 +28,88 @@ describe('SettingsManager defaults', () => {
       maxPaneWidth: 80,
       enabledNotificationSounds: ['default-system-sound'],
       showFooterTips: true,
+      language: 'en',
       colorTheme: 'orange',
     });
+  });
+
+  it('loads and persists valid language settings', async () => {
+    const written: Array<{ path: string; data: string }> = [];
+
+    vi.doMock('fs', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('fs')>();
+      return {
+        ...actual,
+        existsSync: vi.fn((path: string) => path.endsWith('.dmux.global.json')),
+        readFileSync: vi.fn((path: string) => {
+          if (path.endsWith('.dmux.global.json')) {
+            return JSON.stringify({ language: 'ja' });
+          }
+          throw new Error(`Unexpected path: ${path}`);
+        }),
+        writeFileSync: vi.fn((path: string, data: string) => {
+          written.push({ path, data });
+        }),
+        mkdirSync: vi.fn(),
+      };
+    });
+
+    const { SettingsManager } = await import('../src/utils/settingsManager.js');
+    const manager = new SettingsManager('/tmp/test-project');
+
+    expect(manager.getSettings().language).toBe('ja');
+
+    manager.updateSetting('language', 'en', 'global');
+    expect(manager.getSettings().language).toBe('en');
+    expect(JSON.parse(written.at(-1)?.data ?? '{}')).toMatchObject({ language: 'en' });
+  });
+
+  it('rejects invalid language values', async () => {
+    vi.mock('fs', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('fs')>();
+      return {
+        ...actual,
+        existsSync: vi.fn(() => false),
+        readFileSync: vi.fn(),
+        writeFileSync: vi.fn(),
+        mkdirSync: vi.fn(),
+      };
+    });
+
+    const { SettingsManager } = await import('../src/utils/settingsManager.js');
+    const manager = new SettingsManager('/tmp/test-project');
+
+    expect(() => manager.updateSetting('language', 'fr' as any, 'global')).toThrow(
+      'Invalid language'
+    );
+    expect(() => manager.updateSettings({ language: 'fr' as any }, 'global')).toThrow(
+      'Invalid language'
+    );
+  });
+
+  it('keeps localized setting definitions in parity with canonical definitions', async () => {
+    vi.mock('fs', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('fs')>();
+      return {
+        ...actual,
+        existsSync: vi.fn(() => false),
+        readFileSync: vi.fn(),
+        writeFileSync: vi.fn(),
+        mkdirSync: vi.fn(),
+      };
+    });
+
+    const {
+      SETTING_DEFINITIONS,
+      getLocalizedSettingDefinitions,
+    } = await import('../src/utils/settingsManager.js');
+    const localizedDefinitions = getLocalizedSettingDefinitions();
+
+    expect(localizedDefinitions.map((definition) => definition.key)).toEqual(
+      SETTING_DEFINITIONS.map((definition) => definition.key)
+    );
+    expect(localizedDefinitions.find((definition) => definition.key === 'promptForGitOptionsOnCreate')).toBeDefined();
+    expect(localizedDefinitions.find((definition) => definition.key === 'colorTheme')).toBeDefined();
   });
 
   it('allows overriding promptForGitOptionsOnCreate at project scope', async () => {
