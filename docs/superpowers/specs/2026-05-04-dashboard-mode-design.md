@@ -195,10 +195,13 @@ When `pane.minimized === true` and an `agentSummary` exists, PaneCard renders a 
 
 ## Keybindings
 
-| Key | Action | Context |
-|-----|--------|---------|
-| `M` | Toggle dashboard mode | Global — switches between grid mode and wheel mode |
-| `!` | Jump to next attention-flagged pane | Global — cycles through panes with `needsAttention: true`. In dashboard mode: expands flagged pane into next free wheel slot. Outside dashboard mode: navigates sidebar selection to next flagged pane. |
+Dashboard actions use a leader key prefix: `Ctrl+\` (ASCII 28 in raw mode — safe because Ink disables terminal signal processing). Press `Ctrl+\`, release, then press the action key within 500ms.
+
+| Sequence | Action | Context |
+|----------|--------|---------|
+| `Ctrl+\ m` | Toggle dashboard mode | Switches between grid mode and wheel mode |
+| `Ctrl+\ a` | Jump to next attention-flagged pane | Cycles through panes with `needsAttention: true`. In dashboard mode: expands flagged pane into next free wheel slot. Outside dashboard mode: navigates sidebar selection to next flagged pane. |
+| `Ctrl+\ 1`..`9` | Select project panes | Selects all active (non-minimized) panes belonging to the Nth project in the sidebar. Useful for bulk operations on a project group. |
 
 ## State Transitions
 
@@ -208,18 +211,18 @@ Dashboard OFF (grid mode):
   Status icons show in sidebar
   No summary lines (current PaneCard rendering)
 
-  User presses M →
+  User presses Ctrl+\ m →
 
 Dashboard ON (wheel mode):
   Working panes → minimized: true (removed from tmux grid, shown in sidebar with summary)
   Idle/waiting panes → fill wheel slots (FIFO)
-  Drift-flagged panes → stay minimized with ! marker until user presses !
+  Drift-flagged panes → stay minimized with ! marker until user presses Ctrl+\ a
 
   Pane finishes (idle) → enters next free wheel slot, amber border, flash
   User interacts → agent resumes working → pane re-minimizes, shifts remaining slots
-  User presses ! → next flagged pane expands into a wheel slot (red border if drift)
+  User presses Ctrl+\ a → next flagged pane expands into a wheel slot (red border if drift)
 
-  User presses M →
+  User presses Ctrl+\ m →
 
 Dashboard OFF:
   All minimized panes → minimized: false
@@ -244,6 +247,7 @@ Dashboard OFF:
 - `src/providers/HeuristicsOnlyProvider.ts` — no-op fallback
 - `src/layout/WheelLayoutManager.ts` — fixed-geometry layout for dashboard mode
 - `src/hooks/useDashboardMode.ts` — dashboard state, toggle logic, pane minimization
+- `src/hooks/useLeaderKey.ts` — Ctrl+\ leader key state machine (pending/timeout/action dispatch)
 
 ### Modified files:
 - `src/services/PaneAnalyzer.ts` — use provider interface, add adherence to Stage 3

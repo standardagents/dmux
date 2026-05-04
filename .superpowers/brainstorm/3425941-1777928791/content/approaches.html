@@ -1,0 +1,121 @@
+<h2>Architecture Approaches</h2>
+<p class="subtitle">How to wire task adherence analysis + dashboard mode into the existing codebase</p>
+
+<h3>Subsystem 1: Analysis Pipeline (Task Adherence)</h3>
+<p>Adding "on track" evaluation to the existing PaneAnalyzer &rarr; StatusDetector flow</p>
+
+<div class="options">
+  <div class="option" data-choice="analysis-a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Extend PaneAnalyzer Stage 3</h3>
+      <p>Add task adherence fields to the existing Stage 3 (summary extraction) LLM call. The prompt already receives pane content &mdash; we add the stored task context and ask for <code>onTrack</code> + <code>confidence</code> alongside the existing summary.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>No extra LLM calls &mdash; same latency &amp; cost</li>
+          <li>Summary and adherence evaluated together = coherent output</li>
+          <li>Minimal new code &mdash; extends existing interface</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Stage 3 prompt gets more complex</li>
+          <li>If task context is long, may exceed token budget (currently 180 tokens output)</li>
+          <li>Adherence eval only runs when pane settles (idle/prompt), not while working</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="analysis-b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>New Stage 4: Periodic Adherence Check</h3>
+      <p>Add a separate analysis stage that runs on a timer (e.g., every 30-60s) for panes in <code>working</code> state. Uses stored task context + recent output to evaluate adherence independently of the idle/prompt detection pipeline.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Catches drift while agent is still working, not just when idle</li>
+          <li>Independent cadence &mdash; doesn't bloat existing analysis stages</li>
+          <li>Can use a cheaper/faster model for this specific task</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Extra LLM calls = higher cost</li>
+          <li>New timer + cancellation logic in StatusDetector</li>
+          <li>Two separate summaries to reconcile (adherence vs idle summary)</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="analysis-c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Hybrid: Extend Stage 3 + Periodic Working Check</h3>
+      <p>Extend Stage 3 for idle/prompt states (approach A). <em>Additionally</em>, run a lightweight periodic check for <code>working</code> panes that only returns adherence (no full summary). Two paths optimized for their context.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Catches drift in both working and idle states</li>
+          <li>Working check is lightweight (just on-track + confidence)</li>
+          <li>Idle summary remains coherent with adherence</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Most complex implementation</li>
+          <li>Two code paths to maintain</li>
+          <li>Still has LLM cost for periodic checks</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr style="border-color: var(--border); margin: 2rem 0;">
+
+<h3>Subsystem 2: Dashboard Mode (Layout/Visibility)</h3>
+<p>How the user-toggled dashboard mode interacts with existing hide/show and layout systems</p>
+
+<div class="options">
+  <div class="option" data-choice="layout-a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Reuse Existing Hidden Flag</h3>
+      <p>Dashboard mode = bulk-hide all <code>working</code> panes using the existing <code>hidden</code> flag and <code>paneVisibility</code> utilities. Auto-expand = unhide. The layout system already handles hidden panes (they're excluded from grid calculation).</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Minimal layout changes &mdash; hidden panes already excluded from grid</li>
+          <li>Existing hide/show actions (<code>h</code> key) still work</li>
+          <li>PaneCard already shows "(hidden)" indicator</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>No distinction between "user hid this" and "dashboard auto-hid this"</li>
+          <li>Toggling dashboard mode off would need to restore only auto-hidden panes</li>
+          <li>Need to track which panes were auto-hidden vs manually hidden</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="layout-b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>New "minimized" State (Separate from Hidden)</h3>
+      <p>Add a <code>minimized</code> boolean to <code>DmuxPane</code>, distinct from <code>hidden</code>. Dashboard mode sets <code>minimized: true</code> on working panes. The layout system treats minimized panes like hidden (excluded from grid), but the sidebar renders them differently &mdash; with the enhanced summary line instead of "(hidden)".</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Clean separation: hidden = user choice, minimized = dashboard automation</li>
+          <li>Toggling dashboard off restores only minimized panes</li>
+          <li>PaneCard can render minimized state distinctly (summary line)</li>
+          <li>Manual hide (<code>h</code> key) still works independently</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>New field on DmuxPane type</li>
+          <li>Layout calculator needs to exclude both hidden and minimized</li>
+          <li>Config file grows slightly</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 2rem; padding: 1rem; background: var(--surface); border-radius: 8px; border-left: 3px solid var(--accent);">
+  <h3 style="margin-top: 0;">Recommended Combination</h3>
+  <p><strong>Analysis C (Hybrid)</strong> + <strong>Layout B (minimized state)</strong></p>
+  <p>The hybrid approach gives you drift detection while agents work (the whole point of dashboard mode) plus coherent summaries when they stop. The separate <code>minimized</code> state keeps dashboard automation cleanly separated from manual hide/show, making the toggle predictable.</p>
+</div>

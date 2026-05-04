@@ -1,0 +1,194 @@
+<h2>Dashboard Mode: Wheel Layout</h2>
+<p class="subtitle">Panes flow through a fixed grid geometry &mdash; no resize churn</p>
+
+<div class="section">
+  <h3>The Problem</h3>
+  <p>Current behavior: every pane add/remove triggers a full grid recalculation. Column count changes, widths shift, everything resizes. In dashboard mode with frequent expand/collapse, this would be constant visual disruption.</p>
+</div>
+
+<div class="section">
+  <h3>The Wheel Concept</h3>
+  <p>Fixed grid slots. Panes needing attention queue into them. User focuses on top-left; new arrivals appear bottom-right and flow up/left as earlier panes are resolved.</p>
+</div>
+
+<div class="split" style="gap: 1.5rem; margin: 1.5rem 0;">
+  <!-- State 1 -->
+  <div class="mockup" style="flex: 1;">
+    <div class="mockup-header">Step 1: Two panes need attention</div>
+    <div class="mockup-body" style="padding: 0; font-family: monospace; font-size: 13px; line-height: 1.4;">
+      <div style="display: flex; height: 220px;">
+        <div style="width: 120px; background: #1a1a2e; border-right: 1px solid #333; padding: 8px; font-size: 11px; color: #888;">
+          <div style="color: #e0e0e0; margin-bottom: 4px;">Sidebar</div>
+          <div style="color: #4fc3f7;">&#9659; auth-refac</div>
+          <div style="color: #aaa;">&nbsp; db-migrate</div>
+          <div style="color: #aaa; font-size: 10px;">&nbsp;&nbsp;Working...</div>
+          <div style="color: #aaa;">&nbsp; ui-refresh</div>
+          <div style="color: #aaa; font-size: 10px;">&nbsp;&nbsp;On track (high)</div>
+          <div style="color: #ffb74d;">&nbsp; ontology</div>
+        </div>
+        <div style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;">
+          <div style="background: #1a2e1a; border: 1px solid #4caf50; padding: 8px;">
+            <div style="color: #4caf50; font-size: 11px; font-weight: bold;">&#9650; FOCUS HERE</div>
+            <div style="color: #e0e0e0; font-size: 12px; margin-top: 4px;">auth-refactor</div>
+            <div style="color: #aaa; font-size: 10px;">Asking: "Which auth provider?"</div>
+          </div>
+          <div style="background: #2e2a1a; border: 1px solid #ffb74d; padding: 8px;">
+            <div style="color: #ffb74d; font-size: 11px;">&#9679; QUEUED</div>
+            <div style="color: #e0e0e0; font-size: 12px; margin-top: 4px;">ontology-refac</div>
+            <div style="color: #aaa; font-size: 10px;">Waiting for input</div>
+          </div>
+          <div style="background: #1a1a2e; border: 1px solid #333; padding: 8px; display: flex; align-items: center; justify-content: center;">
+            <div style="color: #555; font-size: 11px;">(empty slot)</div>
+          </div>
+          <div style="background: #1a1a2e; border: 1px solid #333; padding: 8px; display: flex; align-items: center; justify-content: center;">
+            <div style="color: #555; font-size: 11px;">(empty slot)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- State 2 -->
+  <div class="mockup" style="flex: 1;">
+    <div class="mockup-header">Step 2: User resolves auth-refac, it auto-minimizes</div>
+    <div class="mockup-body" style="padding: 0; font-family: monospace; font-size: 13px; line-height: 1.4;">
+      <div style="display: flex; height: 220px;">
+        <div style="width: 120px; background: #1a1a2e; border-right: 1px solid #333; padding: 8px; font-size: 11px; color: #888;">
+          <div style="color: #e0e0e0; margin-bottom: 4px;">Sidebar</div>
+          <div style="color: #aaa;">&nbsp; auth-refac</div>
+          <div style="color: #aaa; font-size: 10px;">&nbsp;&nbsp;Working...</div>
+          <div style="color: #aaa;">&nbsp; db-migrate</div>
+          <div style="color: #aaa; font-size: 10px;">&nbsp;&nbsp;Working...</div>
+          <div style="color: #aaa;">&nbsp; ui-refresh</div>
+          <div style="color: #aaa; font-size: 10px;">&nbsp;&nbsp;On track (high)</div>
+          <div style="color: #4fc3f7;">&#9659; ontology</div>
+        </div>
+        <div style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;">
+          <div style="background: #1a2e1a; border: 1px solid #4caf50; padding: 8px;">
+            <div style="color: #4caf50; font-size: 11px; font-weight: bold;">&#9650; FOCUS HERE</div>
+            <div style="color: #e0e0e0; font-size: 12px; margin-top: 4px;">ontology-refac</div>
+            <div style="color: #aaa; font-size: 10px;">Shifted up from slot 2</div>
+          </div>
+          <div style="background: #1a1a2e; border: 1px solid #333; padding: 8px; display: flex; align-items: center; justify-content: center;">
+            <div style="color: #555; font-size: 11px;">(empty slot)</div>
+          </div>
+          <div style="background: #1a1a2e; border: 1px solid #333; padding: 8px; display: flex; align-items: center; justify-content: center;">
+            <div style="color: #555; font-size: 11px;">(empty slot)</div>
+          </div>
+          <div style="background: #1a1a2e; border: 1px solid #333; padding: 8px; display: flex; align-items: center; justify-content: center;">
+            <div style="color: #555; font-size: 11px;">(empty slot)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="split" style="gap: 1.5rem; margin: 1.5rem 0;">
+  <!-- State 3 -->
+  <div class="mockup" style="flex: 1;">
+    <div class="mockup-header">Step 3: db-migrate drifts, ui-refresh finishes &mdash; both expand</div>
+    <div class="mockup-body" style="padding: 0; font-family: monospace; font-size: 13px; line-height: 1.4;">
+      <div style="display: flex; height: 220px;">
+        <div style="width: 120px; background: #1a1a2e; border-right: 1px solid #333; padding: 8px; font-size: 11px; color: #888;">
+          <div style="color: #e0e0e0; margin-bottom: 4px;">Sidebar</div>
+          <div style="color: #aaa;">&nbsp; auth-refac</div>
+          <div style="color: #aaa; font-size: 10px;">&nbsp;&nbsp;Working...</div>
+          <div style="color: #4fc3f7;">&#9659; ontology</div>
+          <div style="color: #ffb74d;">&nbsp;! db-migrate</div>
+          <div style="color: #4fc3f7;">&nbsp; ui-refresh</div>
+        </div>
+        <div style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;">
+          <div style="background: #1a2e1a; border: 1px solid #4caf50; padding: 8px;">
+            <div style="color: #4caf50; font-size: 11px; font-weight: bold;">&#9650; FOCUS HERE</div>
+            <div style="color: #e0e0e0; font-size: 12px; margin-top: 4px;">ontology-refac</div>
+            <div style="color: #aaa; font-size: 10px;">Still being worked on</div>
+          </div>
+          <div style="background: #2e1a1a; border: 1px solid #f44336; padding: 8px;">
+            <div style="color: #f44336; font-size: 11px;">! DRIFTED</div>
+            <div style="color: #e0e0e0; font-size: 12px; margin-top: 4px;">db-migrate</div>
+            <div style="color: #aaa; font-size: 10px;">Refactoring tests (off-task)</div>
+          </div>
+          <div style="background: #1a2e2e; border: 1px solid #4fc3f7; padding: 8px;">
+            <div style="color: #4fc3f7; font-size: 11px;">IDLE</div>
+            <div style="color: #e0e0e0; font-size: 12px; margin-top: 4px;">ui-refresh</div>
+            <div style="color: #aaa; font-size: 10px;">Done &mdash; ready to merge</div>
+          </div>
+          <div style="background: #1a1a2e; border: 1px solid #333; padding: 8px; display: flex; align-items: center; justify-content: center;">
+            <div style="color: #555; font-size: 11px;">(empty slot)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slot geometry -->
+  <div class="mockup" style="flex: 1;">
+    <div class="mockup-header">Slot Fill Order (the "wheel")</div>
+    <div class="mockup-body" style="padding: 12px; font-family: monospace; font-size: 13px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; height: 180px;">
+        <div style="background: #1a2e1a; border: 2px solid #4caf50; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+          <div style="color: #4caf50; font-size: 20px; font-weight: bold;">1</div>
+          <div style="color: #888; font-size: 10px;">Focus slot</div>
+          <div style="color: #4caf50; font-size: 18px; margin-top: 4px;">&#8593;</div>
+        </div>
+        <div style="background: #1a1a2e; border: 2px solid #666; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+          <div style="color: #aaa; font-size: 20px; font-weight: bold;">2</div>
+          <div style="color: #888; font-size: 10px;">Next up</div>
+          <div style="color: #666; font-size: 18px; margin-top: 4px;">&#8592;</div>
+        </div>
+        <div style="background: #1a1a2e; border: 2px solid #444; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+          <div style="color: #888; font-size: 20px; font-weight: bold;">4</div>
+          <div style="color: #666; font-size: 10px;">Newest</div>
+          <div style="color: #666; font-size: 18px; margin-top: 4px;">&#8593;</div>
+        </div>
+        <div style="background: #1a1a2e; border: 2px solid #555; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+          <div style="color: #888; font-size: 20px; font-weight: bold;">3</div>
+          <div style="color: #666; font-size: 10px;">Queue</div>
+          <div style="color: #666; font-size: 18px; margin-top: 4px;">&#8594;</div>
+        </div>
+      </div>
+      <div style="text-align: center; margin-top: 12px; color: #888; font-size: 11px;">
+        Fill: 1 &rarr; 2 &rarr; 3 &rarr; 4<br>
+        Resolve slot 1 &rarr; everything shifts<br>
+        Grid geometry never changes
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 1.5rem; padding: 1rem; background: var(--surface); border-radius: 8px; border-left: 3px solid var(--accent);">
+  <h3 style="margin-top: 0;">Key Properties</h3>
+  <ul style="margin: 0; padding-left: 1.2rem;">
+    <li><strong>Fixed geometry</strong> &mdash; Grid is always 2x2 (or configurable). No resize when panes expand/collapse.</li>
+    <li><strong>Stable focus point</strong> &mdash; Slot 1 (top-left) is always the primary attention target.</li>
+    <li><strong>Queue semantics</strong> &mdash; New arrivals go to the lowest empty slot. When slot 1 is resolved, everything shifts up/left.</li>
+    <li><strong>Empty slots are fine</strong> &mdash; If only 1 pane needs attention, slots 2-4 stay empty (spacer panes or blank).</li>
+    <li><strong>Overflow</strong> &mdash; If more than 4 panes need attention, extras stay minimized in sidebar with attention markers. They auto-fill slots as they free up.</li>
+  </ul>
+</div>
+
+<h3 style="margin-top: 2rem;">Open Questions</h3>
+<div class="options">
+  <div class="option" data-choice="fixed-2x2" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Fixed 2x2 grid (4 slots)</h3>
+      <p>Always 2 columns, 2 rows. Simple, predictable. Handles up to 4 attention panes before overflow.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="fixed-2col" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Fixed 2 columns, rows expand</h3>
+      <p>Always 2 columns but rows grow as needed (2x1, 2x2, 2x3...). More capacity, slight height redistribution when a new row is added.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="adaptive-max" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Adaptive with max slots setting</h3>
+      <p>User configures max visible slots (default 4). Grid geometry adjusts once at dashboard toggle, then stays fixed until the user changes it. Best of both worlds.</p>
+    </div>
+  </div>
+</div>

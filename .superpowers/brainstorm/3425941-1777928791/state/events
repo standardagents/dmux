@@ -1,0 +1,1 @@
+{"type":"click","text":"C\n    \n      Adaptive with max slots setting\n      User configures max visible slots (default 4). Grid geometry adjusts once at dashboard toggle, then stays fixed until the user changes it. Best of both worlds.","choice":"adaptive-max","id":null,"timestamp":1777930486166}
