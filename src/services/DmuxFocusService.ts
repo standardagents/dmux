@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'crypto';
-import { spawn, spawnSync } from 'child_process';
+import { execFileSync, spawn, spawnSync } from 'child_process';
 import { createConnection } from 'node:net';
 import type { Socket } from 'node:net';
 import { EventEmitter } from 'events';
@@ -1000,6 +1000,24 @@ export class DmuxFocusService extends EventEmitter {
       fullyFocusedPaneId: paneId,
       helperFocused: this.helperFocused,
     } satisfies DmuxFocusChangedEvent);
+  }
+
+  setWheelSlotBorder(tmuxPaneId: string, type: 'attention' | 'drift'): void {
+    const color = type === 'drift' ? 'red' : 'yellow';
+    try {
+      execFileSync('tmux', ['select-pane', '-t', tmuxPaneId, '-P', `border-style=fg=${color}`], { stdio: 'ignore' });
+    } catch { /* pane may not exist */ }
+  }
+
+  clearWheelSlotBorder(tmuxPaneId: string): void {
+    try {
+      execFileSync('tmux', ['select-pane', '-t', tmuxPaneId, '-P', 'border-style=default'], { stdio: 'ignore' });
+    } catch { /* pane may not exist */ }
+  }
+
+  async flashAndSetBorder(tmuxPaneId: string, type: 'attention' | 'drift'): Promise<void> {
+    await this.flashPaneAttention(tmuxPaneId);
+    this.setWheelSlotBorder(tmuxPaneId, type);
   }
 
   private writeTerminalTitle(title: string): void {
