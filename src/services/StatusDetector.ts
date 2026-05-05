@@ -2,23 +2,29 @@ import { EventEmitter } from 'events';
 import type { DmuxPane, AgentStatus, OptionChoice, PotentialHarm } from '../types.js';
 import { WorkerMessageBus } from './WorkerMessageBus.js';
 import { PaneWorkerManager } from './PaneWorkerManager.js';
-import { PaneAnalyzer } from './PaneAnalyzer.js';
-import type { PaneAnalysis } from './PaneAnalyzer.js';
+import { PaneAnalyzer, buildAdherencePrompt, parseAdherenceResponse } from './PaneAnalyzer.js';
+import type { PaneAnalysis, AdherenceResult } from './PaneAnalyzer.js';
 import type { OutboundMessage } from '../workers/WorkerMessages.js';
 import type { CodexTurnStoppedPayload } from '../workers/WorkerMessages.js';
 import { StateManager } from '../shared/StateManager.js';
 import { LogService } from './LogService.js';
 import { getPaneDisplayName } from '../utils/paneTitle.js';
+import { capturePaneContent } from '../utils/paneCapture.js';
+import { createAnalysisProvider, type AnalysisProvider } from '../providers/AnalysisProvider.js';
+import { DEFAULT_ADHERENCE_CHECK_INTERVAL } from '../constants/layout.js';
 
 export interface StatusUpdateEvent {
   paneId: string;
-  status: AgentStatus;
+  status?: AgentStatus;
   previousStatus?: AgentStatus;
   optionsQuestion?: string;
   options?: OptionChoice[];
   potentialHarm?: PotentialHarm;
   summary?: string;
   analyzerError?: string;
+  needsAttention?: boolean;
+  adherence?: AdherenceResult;
+  taskContext?: string;
 }
 
 export interface AttentionNeededEvent {
@@ -45,9 +51,12 @@ export class StatusDetector extends EventEmitter {
   private workerManager: PaneWorkerManager;
   private messageBus: WorkerMessageBus;
   private paneAnalyzer: PaneAnalyzer;
+  private provider: AnalysisProvider;
   private paneStatuses = new Map<string, AgentStatus>();
   private llmRequests = new Map<string, AbortController>();
   private paneIdMap = new Map<string, string>(); // dmux pane ID -> tmux pane ID
+  private adherenceTimers = new Map<string, ReturnType<typeof setInterval>>();
+  private adherenceAbortControllers = new Map<string, AbortController>();
   private isShuttingDown = false;
 
   constructor() {
@@ -55,6 +64,10 @@ export class StatusDetector extends EventEmitter {
     this.messageBus = new WorkerMessageBus();
     this.workerManager = new PaneWorkerManager(this.messageBus);
     this.paneAnalyzer = new PaneAnalyzer();
+    this.provider = createAnalysisProvider(
+      (process.env.DMUX_ANALYSIS_BACKEND || 'auto') as any,
+      { openRouterKey: process.env.OPENROUTER_API_KEY || '' }
+    );
 
     this.setupMessageHandlers();
   }
@@ -85,6 +98,7 @@ export class StatusDetector extends EventEmitter {
 
     // Handle pane removal (when pane no longer exists in tmux)
     this.messageBus.subscribe('pane-removed', (paneId, message) => {
+      this.stopAdherenceTimer(paneId);
       this.emit('pane-removed', { paneId, reason: message.payload?.reason });
     });
 
@@ -146,6 +160,17 @@ export class StatusDetector extends EventEmitter {
     // Clear analyzerError when transitioning to working status
     if (status === 'working') {
       updateEvent.analyzerError = '';
+
+      // Start adherence timer for working panes
+      const pane = StateManager.getInstance().getPaneById(paneId);
+      const paneName = pane ? getPaneDisplayName(pane) : paneId;
+      const taskContext = pane?.taskContext || pane?.prompt || '';
+      if (taskContext) {
+        this.startAdherenceTimer(paneId, taskContext, paneName);
+      }
+    } else {
+      // Stop adherence timer when pane leaves working state
+      this.stopAdherenceTimer(paneId);
     }
 
     this.emit('status-updated', updateEvent);
@@ -413,6 +438,17 @@ export class StatusDetector extends EventEmitter {
     this.emit('pane-user-interaction', {
       paneId,
     } satisfies PaneUserInteractionEvent);
+
+    // Task context capture: snapshot recent pane content when user interacts
+    try {
+      const tmuxPaneId = this.paneIdMap.get(paneId);
+      if (tmuxPaneId) {
+        const content = capturePaneContent(tmuxPaneId, 30);
+        if (content.trim().length > 0) {
+          this.emit('status-updated', { paneId, taskContext: content } as StatusUpdateEvent);
+        }
+      }
+    } catch { /* best-effort */ }
   }
 
   /**
@@ -541,6 +577,46 @@ export class StatusDetector extends EventEmitter {
   }
 
   /**
+   * Start periodic adherence checking for a working pane
+   */
+  private startAdherenceTimer(paneId: string, taskContext: string, paneName: string): void {
+    this.stopAdherenceTimer(paneId);
+    const interval = DEFAULT_ADHERENCE_CHECK_INTERVAL * 1000;
+
+    const timer = setInterval(async () => {
+      const controller = new AbortController();
+      this.adherenceAbortControllers.set(paneId, controller);
+      try {
+        const tmuxPaneId = this.paneIdMap.get(paneId);
+        if (!tmuxPaneId) return;
+        const content = capturePaneContent(tmuxPaneId, 30);
+        const userPrompt = buildAdherencePrompt(content, taskContext, paneName);
+        const response = await this.provider.analyze(
+          { system: 'Evaluate if an AI agent is on track with its task.', user: userPrompt, maxTokens: 60 },
+          controller.signal
+        );
+        const result = parseAdherenceResponse(response);
+        if (result && !result.onTrack && result.confidence > 0.7) {
+          this.emit('status-updated', { paneId, status: 'working', needsAttention: true, adherence: result } as StatusUpdateEvent);
+        }
+      } catch { /* best-effort */ }
+      finally { this.adherenceAbortControllers.delete(paneId); }
+    }, interval);
+
+    this.adherenceTimers.set(paneId, timer);
+  }
+
+  /**
+   * Stop adherence timer for a pane
+   */
+  private stopAdherenceTimer(paneId: string): void {
+    const timer = this.adherenceTimers.get(paneId);
+    if (timer) { clearInterval(timer); this.adherenceTimers.delete(paneId); }
+    const ctrl = this.adherenceAbortControllers.get(paneId);
+    if (ctrl) { ctrl.abort(); this.adherenceAbortControllers.delete(paneId); }
+  }
+
+  /**
    * Get tmux pane ID for a dmux pane
    */
   private async getTmuxPaneId(paneId: string): Promise<string | null> {
@@ -620,6 +696,12 @@ export class StatusDetector extends EventEmitter {
    */
   async shutdown(): Promise<void> {
     this.isShuttingDown = true;
+
+    // Stop all adherence timers
+    this.adherenceTimers.forEach(timer => clearInterval(timer));
+    this.adherenceTimers.clear();
+    this.adherenceAbortControllers.forEach(ctrl => ctrl.abort());
+    this.adherenceAbortControllers.clear();
 
     // Cancel all LLM requests
     this.llmRequests.forEach(controller => controller.abort());
