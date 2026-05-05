@@ -20,6 +20,17 @@ function pane(id: string, hidden = false, projectRoot = '/repo-a'): DmuxPane {
 }
 
 describe('paneVisibility', () => {
+  it('excludes minimized panes from visible panes', () => {
+    const panes = [
+      pane('dmux-1', false),
+      { ...pane('dmux-2', false), minimized: true },
+      pane('dmux-3', false),
+    ];
+
+    const visible = getVisiblePanes(panes);
+    expect(visible.map(p => p.id)).toEqual(['dmux-1', 'dmux-3']);
+  });
+
   it('syncs hidden flags from the active window pane list', () => {
     const panes = [
       pane('dmux-1', true),

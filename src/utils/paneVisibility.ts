@@ -10,7 +10,7 @@ function sameProjectRoot(a: string, b: string): boolean {
 }
 
 export function getVisiblePanes(panes: DmuxPane[]): DmuxPane[] {
-  return panes.filter((pane) => !pane.hidden);
+  return panes.filter((pane) => !pane.hidden && !pane.minimized);
 }
 
 export function syncHiddenStateFromCurrentWindow(
