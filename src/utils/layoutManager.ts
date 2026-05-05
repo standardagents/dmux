@@ -17,6 +17,7 @@ import { StateManager } from '../shared/StateManager.js';
 import { LayoutCalculator, type LayoutConfiguration } from '../layout/LayoutCalculator.js';
 import { SpacerManager } from '../layout/SpacerManager.js';
 import { TmuxLayoutApplier } from '../layout/TmuxLayoutApplier.js';
+import { WheelLayoutManager } from '../layout/WheelLayoutManager.js';
 
 /**
  * Configurable layout parameters
@@ -537,4 +538,34 @@ export function calculateOptimalLayout(
 export function distributePanes(numPanes: number, cols: number): number[] {
   const calculator = new LayoutCalculator(DEFAULT_LAYOUT_CONFIG);
   return calculator.distributePanes(numPanes, cols);
+}
+
+export async function applyWheelLayout(
+  controlPaneId: string,
+  wheel: WheelLayoutManager,
+  terminalWidth: number,
+  terminalHeight: number,
+  config?: LayoutConfig
+): Promise<void> {
+  const resolvedConfig = config ?? resolveLayoutConfig();
+  const geo = wheel.calculateGeometry(terminalWidth, terminalHeight, resolvedConfig.SIDEBAR_WIDTH);
+  const paneIds = wheel.getAllPaneIds();
+
+  if (paneIds.length === 0) return;
+
+  const applier = new TmuxLayoutApplier(resolvedConfig);
+  applier.setWindowDimensions(terminalWidth, terminalHeight);
+  applier.applyPaneLayout(controlPaneId, paneIds, {
+    cols: geo.columns,
+    rows: geo.rows,
+    windowWidth: terminalWidth,
+    paneDistribution: distributePanesEvenly(paneIds.length, geo.columns),
+    actualPaneWidth: geo.paneWidth,
+  }, terminalHeight);
+}
+
+function distributePanesEvenly(count: number, cols: number): number[] {
+  const base = Math.floor(count / cols);
+  const remainder = count % cols;
+  return Array.from({ length: cols }, (_, i) => base + (i < remainder ? 1 : 0));
 }
