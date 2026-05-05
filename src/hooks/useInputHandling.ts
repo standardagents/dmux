@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useCallback } from "react"
 import path from "path"
 import { useInput } from "ink"
 import type { DmuxPane, NewPaneInput, SidebarProject } from "../types.js"
@@ -63,6 +63,7 @@ import {
   syncPaneColorThemes,
 } from "../utils/paneColors.js"
 import { syncWelcomePaneVisibility } from "../utils/welcomePaneManager.js"
+import { useLeaderKey } from './useLeaderKey.js'
 
 // Type for the action system returned by useActionSystem hook
 interface ActionSystem {
@@ -139,6 +140,11 @@ interface UseInputHandlingParams {
 
   // Navigation
   findCardInDirection: (currentIndex: number, direction: "up" | "down" | "left" | "right") => number | null
+
+  // Dashboard mode callbacks (optional, wired by DmuxApp)
+  onDashboardToggle?: () => void
+  onJumpToAttention?: () => void
+  onProjectToggle?: (n: number) => void
 }
 
 /**
@@ -194,6 +200,28 @@ export function useInputHandling(params: UseInputHandlingParams) {
     projectActionItems,
     findCardInDirection,
   } = params
+
+  const handleDashboardToggle = useCallback(() => {
+    params.onDashboardToggle?.()
+  }, [params.onDashboardToggle])
+
+  const handleJumpToAttention = useCallback(() => {
+    params.onJumpToAttention?.()
+  }, [params.onJumpToAttention])
+
+  const handleProjectToggle = useCallback((n: number) => {
+    params.onProjectToggle?.(n)
+  }, [params.onProjectToggle])
+
+  const { handleInput: handleLeaderInput } = useLeaderKey((action) => {
+    switch (action) {
+      case 'm': handleDashboardToggle(); break;
+      case 'a': handleJumpToAttention(); break;
+      default:
+        if (action >= '1' && action <= '9') handleProjectToggle(parseInt(action, 10));
+        break;
+    }
+  })
 
   const layoutRefreshDebounceRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -1173,6 +1201,9 @@ export function useInputHandling(params: UseInputHandlingParams) {
   ])
 
   useInput(async (input: string, key: any) => {
+    // Leader key state machine gets first crack at consuming input
+    if (handleLeaderInput(input)) return;
+
     // Ignore input temporarily after popup operations (prevents buffered keys from being processed)
     if (ignoreInput) {
       return

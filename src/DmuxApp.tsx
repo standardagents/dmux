@@ -19,6 +19,7 @@ import { useInputHandling } from "./hooks/useInputHandling.js"
 import { useDialogState } from "./hooks/useDialogState.js"
 import { useDebugInfo } from "./hooks/useDebugInfo.js"
 import { useProjectActivity } from "./hooks/useProjectActivity.js"
+import { useDashboardMode, getNextAttentionPane, computeProjectToggle } from './hooks/useDashboardMode.js'
 
 // Utils
 import { SIDEBAR_WIDTH } from "./utils/layoutManager.js"
@@ -141,6 +142,12 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   const { projectSettings, saveSettings } = useProjectSettings(settingsFile)
   const [themeRefreshNonce, setThemeRefreshNonce] = useState(0)
   const [settings, setSettings] = useState(() => new SettingsManager(sessionProjectRoot).getSettings())
+
+  const dashboardMode = useDashboardMode({
+    rows: settings.dashboardRows,
+    columns: settings.dashboardColumns,
+  })
+
   const paneTitlePrefixCacheRef = useRef(new Map<string, string>())
   const paneTitleLabelCacheRef = useRef(new Map<string, string>())
   const paneActiveBorderStyleCacheRef = useRef(new Map<string, string>())
@@ -1550,6 +1557,28 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
     activeProjectRoot: selectedProjectRoot,
     projectActionItems: projectActionLayout.actionItems,
     findCardInDirection,
+    onDashboardToggle: () => {
+      const updatedPanes = dashboardMode.toggle(panes)
+      void savePanes(updatedPanes)
+    },
+    onJumpToAttention: () => {
+      const next = getNextAttentionPane(panes, focusedPaneId ?? undefined)
+      if (next) {
+        const idx = panes.findIndex(p => p.id === next.id)
+        if (idx !== -1) {
+          setSelectedIndex(idx)
+          try {
+            TmuxService.getInstance().selectPane(next.paneId)
+          } catch {}
+        }
+      }
+    },
+    onProjectToggle: (n: number) => {
+      const updatedPanes = computeProjectToggle(panes, n, sidebarProjects)
+      if (updatedPanes !== panes) {
+        void savePanes(updatedPanes)
+      }
+    },
   })
 
   // Calculate available height for content (terminal height - footer lines - active status messages)
