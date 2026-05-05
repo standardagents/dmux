@@ -136,6 +136,25 @@ function sanitizeLoadedSettings(value: unknown): DmuxSettings {
     sanitized.maxPaneWidth = parsed.maxPaneWidth;
   }
 
+  // Dashboard mode settings
+  if (typeof parsed.dashboardRows === 'number' && Number.isInteger(parsed.dashboardRows)
+      && parsed.dashboardRows >= 1 && parsed.dashboardRows <= 10) {
+    sanitized.dashboardRows = parsed.dashboardRows;
+  }
+  if (typeof parsed.dashboardColumns === 'number' && Number.isInteger(parsed.dashboardColumns)
+      && parsed.dashboardColumns >= 1 && parsed.dashboardColumns <= 10) {
+    sanitized.dashboardColumns = parsed.dashboardColumns;
+  }
+  const ANALYSIS_BACKENDS = ['auto', 'claude-code', 'openrouter', 'heuristics'] as const;
+  if (typeof parsed.analysisBackend === 'string'
+      && (ANALYSIS_BACKENDS as readonly string[]).includes(parsed.analysisBackend)) {
+    sanitized.analysisBackend = parsed.analysisBackend as DmuxSettings['analysisBackend'];
+  }
+  if (typeof parsed.adherenceCheckInterval === 'number'
+      && parsed.adherenceCheckInterval >= 10 && parsed.adherenceCheckInterval <= 300) {
+    sanitized.adherenceCheckInterval = parsed.adherenceCheckInterval;
+  }
+
   return sanitized;
 }
 
