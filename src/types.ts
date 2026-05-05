@@ -47,6 +47,8 @@ export interface DmuxPane {
   prompt: string;
   paneId: string;
   hidden?: boolean; // Pane is detached from the active dmux window but still running
+  minimized?: boolean; // Pane is collapsed by dashboard mode (distinct from hidden)
+  taskContext?: string; // Latest intended task — stored prompt or last meaningful user input
   projectRoot?: string; // Main repository root this pane belongs to
   projectName?: string; // Display name for pane's project
   colorTheme?: DmuxThemeName; // Cached effective project accent for fast focus/theme switches
@@ -136,6 +138,11 @@ export interface DmuxSettings {
   maxPaneWidth?: number;
   // Display language ('en' for English, 'ja' for Japanese)
   language?: 'en' | 'ja';
+  // Dashboard mode settings
+  dashboardRows?: number;
+  dashboardColumns?: number;
+  analysisBackend?: 'auto' | 'claude-code' | 'openrouter' | 'heuristics';
+  adherenceCheckInterval?: number; // seconds
 }
 
 export interface NewPaneInput {
