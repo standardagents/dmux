@@ -68,6 +68,39 @@ export function normalizePaneContentForAnalysis(
   return trimSurroundingEmptyLines(trimmedLines.slice(-maxLines)).join('\n');
 }
 
+export interface AdherenceResult {
+  onTrack: boolean;
+  confidence: number;
+  reason: string;
+}
+
+export function buildAdherencePrompt(
+  paneContent: string,
+  taskContext?: string,
+  paneName?: string
+): string {
+  const task = taskContext
+    || (paneName ? `Task inferred from branch: "${paneName}"` : 'Unknown task');
+  return [
+    `INTENDED TASK: ${task}`,
+    '',
+    'CURRENT TERMINAL OUTPUT (last 30 lines):',
+    paneContent,
+    '',
+    'Is this agent on the intended task? JSON: {"onTrack": bool, "confidence": 0.0-1.0, "reason": "brief"}',
+  ].join('\n');
+}
+
+export function parseAdherenceResponse(response: string): AdherenceResult | null {
+  try {
+    const data = JSON.parse(response);
+    if (typeof data.onTrack !== 'boolean' || typeof data.confidence !== 'number' || typeof data.reason !== 'string') {
+      return null;
+    }
+    return { onTrack: data.onTrack, confidence: Math.max(0, Math.min(1, data.confidence)), reason: data.reason };
+  } catch { return null; }
+}
+
 export class PaneAnalyzer {
   private apiKey: string;
   private modelStack: string[] = [
