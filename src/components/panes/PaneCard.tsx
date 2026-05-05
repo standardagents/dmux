@@ -93,38 +93,47 @@ const PaneCard: React.FC<PaneCardProps> = memo(({
   const shellTagColor = isFileBrowserPane ? 'yellow' : pane.type === 'shell' ? 'cyan' : 'gray';
 
   return (
-    <Box width={ROW_WIDTH}>
-      <Box width={LEFT_COLUMN_WIDTH}>
-        <Text color={selected ? paneSelectedColor : COLORS.border}>{prefix}</Text>
-        <Text color={status.color}>{statusText}</Text>
-        {pane.needsAttention && (
-          <Text color={COLORS.warning}>{attentionText}</Text>
-        )}
-        {isDevSource && (
-          <Text color="yellow">{sourceText}</Text>
-        )}
-        {isFileBrowserPane && (
-          <Text color="cyan">{shellPrefixText}</Text>
-        )}
-        <Text color={slugColor} bold={selected || isFileBrowserPane}>
-          {slugText}
-        </Text>
-        {pane.hidden && (
-          <Text color="yellow" dimColor>
-            {hiddenText}
+    <Box flexDirection="column">
+      <Box width={ROW_WIDTH}>
+        <Box width={LEFT_COLUMN_WIDTH}>
+          <Text color={selected ? paneSelectedColor : COLORS.border}>{prefix}</Text>
+          <Text color={status.color}>{statusText}</Text>
+          {pane.needsAttention && (
+            <Text color={COLORS.warning}>{attentionText}</Text>
+          )}
+          {isDevSource && (
+            <Text color="yellow">{sourceText}</Text>
+          )}
+          {isFileBrowserPane && (
+            <Text color="cyan">{shellPrefixText}</Text>
+          )}
+          <Text color={slugColor} bold={selected || isFileBrowserPane}>
+            {slugText}
           </Text>
-        )}
+          {pane.hidden && (
+            <Text color="yellow" dimColor>
+              {hiddenText}
+            </Text>
+          )}
+        </Box>
+        <Box width={RIGHT_COLUMN_WIDTH} justifyContent="flex-end">
+          {agentTag
+            ? <Text color={shellTagColor}>{agentText}</Text>
+            : <Text>{agentText}</Text>
+          }
+          {apTag
+            ? <Text color={COLORS.success}>{autopilotText}</Text>
+            : <Text>{autopilotText}</Text>
+          }
+        </Box>
       </Box>
-      <Box width={RIGHT_COLUMN_WIDTH} justifyContent="flex-end">
-        {agentTag
-          ? <Text color={shellTagColor}>{agentText}</Text>
-          : <Text>{agentText}</Text>
-        }
-        {apTag
-          ? <Text color={COLORS.success}>{autopilotText}</Text>
-          : <Text>{autopilotText}</Text>
-        }
-      </Box>
+      {pane.minimized && pane.agentSummary && (
+        <Box width={ROW_WIDTH}>
+          <Text dimColor wrap="truncate">
+            {'   '}{clipToWidth(pane.agentSummary, ROW_WIDTH - 3)}
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 }, (prevProps, nextProps) => {
@@ -137,6 +146,8 @@ const PaneCard: React.FC<PaneCardProps> = memo(({
     prevProps.pane.testStatus === nextProps.pane.testStatus &&
     prevProps.pane.devStatus === nextProps.pane.devStatus &&
     prevProps.pane.autopilot === nextProps.pane.autopilot &&
+    prevProps.pane.minimized === nextProps.pane.minimized &&
+    prevProps.pane.agentSummary === nextProps.pane.agentSummary &&
     prevProps.pane.hidden === nextProps.pane.hidden &&
     prevProps.pane.type === nextProps.pane.type &&
     prevProps.pane.shellType === nextProps.pane.shellType &&
