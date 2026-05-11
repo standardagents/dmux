@@ -4,16 +4,36 @@
  * Specifically, the 'prompt' -> 'base branch' -> 'new branch name' cycle.
  */
 
-export type NewPaneField = 'prompt' | 'baseBranch' | 'branchName';
+export type NewPaneField = 'prompt' | 'baseBranch' | 'branchName' | 'linkedRepos';
 
-export function getNextNewPaneField(current: NewPaneField): NewPaneField {
-  if (current === 'prompt') return 'baseBranch';
-  if (current === 'baseBranch') return 'branchName';
-  return 'prompt';
+function getFieldOrder(hasLinkedRepos: boolean): NewPaneField[] {
+  return hasLinkedRepos
+    ? ['prompt', 'baseBranch', 'branchName', 'linkedRepos']
+    : ['prompt', 'baseBranch', 'branchName'];
 }
 
-export function getPreviousNewPaneField(current: NewPaneField): NewPaneField {
-  if (current === 'prompt') return 'branchName';
-  if (current === 'baseBranch') return 'prompt';
-  return 'baseBranch';
+export function getNextNewPaneField(
+  current: NewPaneField,
+  options: { hasLinkedRepos?: boolean } = {}
+): NewPaneField {
+  const order = getFieldOrder(options.hasLinkedRepos ?? false);
+  const currentIndex = order.indexOf(current);
+  if (currentIndex === -1) {
+    return order[0];
+  }
+
+  return order[(currentIndex + 1) % order.length];
+}
+
+export function getPreviousNewPaneField(
+  current: NewPaneField,
+  options: { hasLinkedRepos?: boolean } = {}
+): NewPaneField {
+  const order = getFieldOrder(options.hasLinkedRepos ?? false);
+  const currentIndex = order.indexOf(current);
+  if (currentIndex === -1) {
+    return order[0];
+  }
+
+  return order[(currentIndex - 1 + order.length) % order.length];
 }

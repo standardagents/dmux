@@ -30,6 +30,7 @@ vi.mock('../src/utils/settingsManager.js', () => ({
   SettingsManager: vi.fn(() => ({
     getSettings: vi.fn(() => ({
       permissionMode: 'plan',
+      linkedRepoPaths: 'child-repo',
     })),
   })),
 }));
@@ -421,6 +422,7 @@ describe('resumeBranches', () => {
       expect.objectContaining({
         agent: 'codex',
         permissionMode: 'plan',
+        linkedRepoPaths: ['child-repo'],
         branchName: 'feature/remote-shared',
       })
     );

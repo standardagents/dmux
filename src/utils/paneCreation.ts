@@ -23,6 +23,7 @@ import { shellQuote } from './promptStore.js';
 import { isValidBranchName, isValidFullBranchName } from './git.js';
 import { resolvePaneNaming } from './paneNaming.js';
 import { readWorktreeMetadata } from './worktreeMetadata.js';
+import { parseLinkedRepoPathsInput } from './linkedRepoConfig.js';
 import { resolveProjectColorTheme } from './paneColors.js';
 import type { SidebarProject } from '../types.js';
 import { StateManager } from '../shared/StateManager.js';
@@ -39,6 +40,7 @@ export interface CreatePaneOptions {
   baseBranchOverride?: string;
   branchNameOverride?: string;
   goalMode?: boolean;
+  linkedRepoPaths?: string[];
   existingWorktree?: {
     slug: string;
     worktreePath: string;
@@ -165,6 +167,7 @@ export async function createPane(
     baseBranchOverride,
     branchNameOverride,
     goalMode: goalModeOverride,
+    linkedRepoPaths: linkedRepoPathsOverride,
     existingWorktree,
     startPointBranch,
     mergeTargetChain,
@@ -213,6 +216,13 @@ export async function createPane(
   const existingWorktreeMetadata = existingWorktree
     ? readWorktreeMetadata(existingWorktree.worktreePath)
     : null;
+  const linkedRepoPaths = existingWorktreeMetadata?.linkedRepoPaths
+    ?? (linkedRepoPathsOverride !== undefined
+      ? linkedRepoPathsOverride
+      : parseLinkedRepoPathsInput(settings.linkedRepoPaths));
+  const shouldPersistLinkedRepoPaths = existingWorktreeMetadata?.linkedRepoPaths !== undefined
+    || linkedRepoPathsOverride !== undefined
+    || linkedRepoPaths.length > 0;
 
   const sessionProjectRoot = optionsSessionProjectRoot
     || (optionsSessionConfigPath ? path.dirname(path.dirname(optionsSessionConfigPath)) : projectRoot);
@@ -507,6 +517,7 @@ export async function createPane(
       displayName: existingWorktreeMetadata?.displayName,
       branchName: branchName !== slug ? branchName : undefined,
       mergeTargetChain,
+      linkedRepoPaths: shouldPersistLinkedRepoPaths ? linkedRepoPaths : undefined,
     },
     hookExtraEnv,
   };

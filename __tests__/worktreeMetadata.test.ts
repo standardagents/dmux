@@ -29,6 +29,7 @@ describe('worktree metadata persistence', () => {
       goalMode: true,
       displayName: 'Review Queue',
       branchName: 'feat/child-worktree',
+      linkedRepoPaths: ['packages/design-system', 'services/api'],
       mergeTargetChain: [
         {
           displayName: 'Feature Parent',
@@ -50,6 +51,7 @@ describe('worktree metadata persistence', () => {
       goalMode: true,
       displayName: 'Review Queue',
       branchName: 'feat/child-worktree',
+      linkedRepoPaths: ['packages/design-system', 'services/api'],
       mergeTargetChain: [
         {
           displayName: 'Feature Parent',
@@ -63,6 +65,19 @@ describe('worktree metadata persistence', () => {
           worktreePath: '/repo',
         },
       ],
+    });
+  });
+
+  it('preserves an explicit empty linked repo selection so reopen does not fall back to project defaults', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmux-worktree-meta-empty-'));
+    tempDirs.push(tempDir);
+
+    writeWorktreeMetadata(tempDir, {
+      linkedRepoPaths: [],
+    });
+
+    expect(readWorktreeMetadata(tempDir)).toEqual({
+      linkedRepoPaths: [],
     });
   });
 });

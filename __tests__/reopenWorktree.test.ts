@@ -22,6 +22,9 @@ const recalculateAndApplyLayoutMock = vi.hoisted(() => vi.fn(async () => {}));
 const getInstalledAgentsMock = vi.hoisted(() => vi.fn(async () => ['claude', 'codex']));
 const filterEnabledAgentsMock = vi.hoisted(() => vi.fn((agents: string[]) => agents));
 const destroyWelcomePaneCoordinatedMock = vi.hoisted(() => vi.fn());
+const ensureWorkspaceWorktreesMock = vi.hoisted(() => vi.fn(async () => []));
+const getConfiguredLinkedRepoPathsMock = vi.hoisted(() => vi.fn(() => []));
+const writeWorktreeMetadataMock = vi.hoisted(() => vi.fn());
 const readWorktreeMetadataMock = vi.hoisted(() => vi.fn(() => ({
   agent: 'codex',
   permissionMode: 'bypassPermissions',
@@ -74,6 +77,12 @@ vi.mock('../src/utils/agentDetection.js', () => ({
 
 vi.mock('../src/utils/worktreeMetadata.js', () => ({
   readWorktreeMetadata: readWorktreeMetadataMock,
+  writeWorktreeMetadata: writeWorktreeMetadataMock,
+}));
+
+vi.mock('../src/utils/linkedWorktrees.js', () => ({
+  ensureWorkspaceWorktrees: ensureWorkspaceWorktreesMock,
+  getConfiguredLinkedRepoPaths: getConfiguredLinkedRepoPathsMock,
 }));
 
 vi.mock('../src/utils/paneTitle.js', () => ({
@@ -105,6 +114,56 @@ describe('reopenWorktree', () => {
       permissionMode: 'bypassPermissions',
       branchName: 'feature/reopen-me',
     });
+    ensureWorkspaceWorktreesMock.mockResolvedValue([]);
+    getConfiguredLinkedRepoPathsMock.mockReturnValue([]);
+  });
+
+  it('ensures linked child worktrees before resuming an existing pane', async () => {
+    readWorktreeMetadataMock.mockReturnValue({
+      agent: 'codex',
+      permissionMode: 'bypassPermissions',
+      branchName: 'feature/reopen-me',
+      linkedRepoPaths: ['packages/docs'],
+    });
+    ensureWorkspaceWorktreesMock.mockResolvedValue([
+      {
+        isRoot: true,
+        repoPath: '/repo',
+        relativePath: '',
+        worktreePath: '/repo/.dmux/worktrees/reopen-me',
+        createdWorktree: false,
+      },
+      {
+        isRoot: false,
+        repoPath: '/repo/packages/docs',
+        relativePath: 'packages/docs',
+        worktreePath: '/repo/.dmux/worktrees/reopen-me/packages/docs',
+        createdWorktree: true,
+      },
+    ]);
+
+    const { reopenWorktree } = await import('../src/utils/reopenWorktree.js');
+
+    await reopenWorktree({
+      slug: 'reopen-me',
+      worktreePath: '/repo/.dmux/worktrees/reopen-me',
+      projectRoot: '/repo',
+      existingPanes: [],
+      sessionProjectRoot: '/repo',
+      sessionConfigPath: '/repo/.dmux/dmux.config.json',
+    });
+
+    expect(ensureWorkspaceWorktreesMock).toHaveBeenCalledWith({
+      projectRoot: '/repo',
+      rootWorktreePath: '/repo/.dmux/worktrees/reopen-me',
+      branchName: 'feature/reopen-me',
+      linkedRepoPaths: ['packages/docs'],
+      fallbackStartPointMode: 'current-head',
+    });
+    expect(writeWorktreeMetadataMock).toHaveBeenCalledWith(
+      '/repo/.dmux/worktrees/reopen-me/packages/docs',
+      { branchName: 'feature/reopen-me' }
+    );
   });
 
   it('uses stored agent metadata and permission mode for resume', async () => {

@@ -179,6 +179,25 @@ describe('PopupManager launchNewPanePopup', () => {
     });
   });
 
+  it('normalizes linked child repo selections from popup payloads', async () => {
+    const manager = createPopupManager({ promptForGitOptionsOnCreate: true }) as any;
+    manager.checkPopupSupport = vi.fn(() => true);
+    manager.launchPopup = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        prompt: 'prompt',
+        linkedRepoPaths: [' external/web ', 'packages/docs', 'external/web'],
+      },
+    });
+
+    const result = await manager.launchNewPanePopup('/tmp/project');
+
+    expect(result).toEqual({
+      prompt: 'prompt',
+      linkedRepoPaths: ['external/web', 'packages/docs'],
+    });
+  });
+
   it('returns null for malformed popup payloads', async () => {
     const manager = createPopupManager({ promptForGitOptionsOnCreate: true }) as any;
     manager.checkPopupSupport = vi.fn(() => true);
