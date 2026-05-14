@@ -403,7 +403,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
   },
   {
     key: 'linkedRepoPaths',
-    label: 'Linked Child Repos',
+    label: 'Linked Nested Repos',
     description: 'Project-scoped relative repo paths (comma or newline separated) that should get matching worktrees in each pane.',
     type: 'text',
     scopeBehavior: 'project',

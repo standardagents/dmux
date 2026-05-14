@@ -797,7 +797,7 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
               <>
                 <Box marginTop={1} marginBottom={0}>
                   <Text color={activeGitField === 'linkedRepos' ? POPUP_CONFIG.titleColor : 'white'}>
-                    {activeGitField === 'linkedRepos' ? '▶ ' : '  '}Linked child repos ({selectedLinkedRepos.length}/{availableLinkedRepos.length})
+                    {activeGitField === 'linkedRepos' ? '▶ ' : '  '}Linked nested repos ({selectedLinkedRepos.length}/{availableLinkedRepos.length})
                   </Text>
                 </Box>
                 <Box

@@ -179,7 +179,7 @@ describe('PopupManager launchNewPanePopup', () => {
     });
   });
 
-  it('normalizes linked child repo selections from popup payloads', async () => {
+  it('normalizes linked nested repo selections from popup payloads', async () => {
     const manager = createPopupManager({ promptForGitOptionsOnCreate: true }) as any;
     manager.checkPopupSupport = vi.fn(() => true);
     manager.launchPopup = vi.fn().mockResolvedValue({

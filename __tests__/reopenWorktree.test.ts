@@ -118,7 +118,7 @@ describe('reopenWorktree', () => {
     getConfiguredLinkedRepoPathsMock.mockReturnValue([]);
   });
 
-  it('ensures linked child worktrees before resuming an existing pane', async () => {
+  it('ensures linked nested repo worktrees before resuming an existing pane', async () => {
     readWorktreeMetadataMock.mockReturnValue({
       agent: 'codex',
       permissionMode: 'bypassPermissions',

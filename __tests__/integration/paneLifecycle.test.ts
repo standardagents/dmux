@@ -326,7 +326,7 @@ describe('Pane Lifecycle Integration Tests', () => {
       )).toBe(false);
     });
 
-    it('passes configured linked child repos into the pane bootstrap config', async () => {
+    it('passes configured linked nested repos into the pane bootstrap config', async () => {
       fsMock.readFileSync.mockImplementation((target) => {
         const value = String(target);
         if (value.endsWith('/.dmux/settings.json')) {
@@ -358,7 +358,7 @@ describe('Pane Lifecycle Integration Tests', () => {
       ]);
     });
 
-    it('passes explicit linked child repo selections into the pane bootstrap config', async () => {
+    it('passes explicit linked nested repo selections into the pane bootstrap config', async () => {
       const { createPane } = await import('../../src/utils/paneCreation.js');
 
       await createPane(
