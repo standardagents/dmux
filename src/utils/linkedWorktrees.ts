@@ -502,6 +502,20 @@ function getWorktreePath(rootWorktreePath: string, relativePath: string): string
     : rootWorktreePath;
 }
 
+function isSafeEmptyPlaceholderDir(worktreePath: string): boolean {
+  try {
+    const stat = fs.statSync(worktreePath);
+    if (!stat.isDirectory()) {
+      return false;
+    }
+
+    const entries = fs.readdirSync(worktreePath);
+    return entries.length === 0;
+  } catch {
+    return false;
+  }
+}
+
 async function ensureWorktreeAttached(
   state: WorkspaceRepoState,
   worktreePath: string,
@@ -526,7 +540,11 @@ async function ensureWorktreeAttached(
   }
 
   if (fs.existsSync(worktreePath)) {
-    throw new Error(`Path already exists and is not a git worktree: ${worktreePath}`);
+    if (isSafeEmptyPlaceholderDir(worktreePath)) {
+      fs.rmdirSync(worktreePath);
+    } else {
+      throw new Error(`Path already exists and is not a git worktree: ${worktreePath}`);
+    }
   }
 
   state.hasLocalBranch = (await listLocalBranchesAsync(state.repoPath)).has(branchName);
