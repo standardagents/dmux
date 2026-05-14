@@ -121,13 +121,19 @@ describe('PopupManager launchNewPanePopup', () => {
 
     await manager.launchNewPanePopup(tempRoot);
 
-    expect(manager.launchPopup).toHaveBeenCalledWith(
-      'newPanePopup.js',
-      [tempRoot, '0', '1'],
-      expect.any(Object),
-      undefined,
-      tempRoot
-    );
+    expect(manager.launchPopup).toHaveBeenCalledTimes(1);
+    const [scriptName, popupArgs, popupOptions, popupData, popupProjectRoot] =
+      manager.launchPopup.mock.calls[0];
+
+    expect(scriptName).toBe('newPanePopup.js');
+    expect(popupArgs).toEqual([
+      tempRoot,
+      expect.any(String),
+      '1',
+    ]);
+    expect(popupOptions).toEqual(expect.any(Object));
+    expect(popupData).toBeUndefined();
+    expect(popupProjectRoot).toBe(tempRoot);
   });
 
   it('disables git options when caller requests allowGitOptions=false', async () => {
