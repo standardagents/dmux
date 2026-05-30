@@ -3,7 +3,7 @@ export const meta = { title: 'Agents' };
 export function render() {
   return `
     <h1>Agents</h1>
-    <p class="lead">dmux supports 12 AI coding agents. Each agent is automatically detected if its CLI is installed and available in your PATH.</p>
+    <p class="lead">dmux supports 13 AI coding agents. Each agent is automatically detected if its CLI is installed and available in your PATH.</p>
 
     <h2>Agent Detection</h2>
     <p>dmux automatically detects installed agents by searching:</p>

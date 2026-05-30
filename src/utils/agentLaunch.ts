@@ -24,6 +24,7 @@ export const AGENT_IDS = [
   'cursor',
   'copilot',
   'crush',
+  'antigravity',
 ] as const;
 
 export type AgentName = typeof AGENT_IDS[number];
@@ -350,6 +351,30 @@ export const AGENT_REGISTRY: Readonly<Record<AgentName, AgentRegistryEntry>> = {
       bypassPermissions: '--yolo',
     },
     defaultEnabled: false,
+  },
+  antigravity: {
+    id: 'antigravity',
+    name: 'Antigravity CLI',
+    shortLabel: 'ag',
+    description: 'Google Antigravity CLI',
+    slugSuffix: 'antigravity',
+    installTestCommand: 'command -v agy 2>/dev/null || which agy 2>/dev/null',
+    commonPaths: [
+      ...homePath('.antigravity/bin/agy'),
+      '/usr/local/bin/agy',
+      '/opt/homebrew/bin/agy',
+      ...homePath('.local/bin/agy'),
+      ...homePath('bin/agy'),
+      ...homePath('.npm-global/bin/agy'),
+    ],
+    promptCommand: 'agy',
+    promptTransport: 'option',
+    promptOption: '--prompt-interactive',
+    permissionFlags: {
+      bypassPermissions: '--dangerously-skip-permissions',
+    },
+    defaultEnabled: false,
+    resumeCommandTemplate: 'agy --continue{permissions}',
   },
 };
 

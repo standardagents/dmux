@@ -237,6 +237,7 @@ export function hasAgentWorkingIndicators(content: string, agent?: AgentName): b
     case 'amp':
     case 'pi':
     case 'crush':
+    case 'antigravity':
       return lines.some((line) => progressWordPattern.test(line));
     default:
       return lines.some((line) => progressWordPattern.test(line));
