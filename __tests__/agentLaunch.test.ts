@@ -34,6 +34,7 @@ describe('agent launch utils', () => {
     expect(getAgentSlugSuffix('codex')).toBe('codex');
     expect(getAgentSlugSuffix('grok')).toBe('grok-build');
     expect(getAgentSlugSuffix('gemini')).toBe('gemini');
+    expect(getAgentSlugSuffix('antigravity')).toBe('antigravity');
   });
 
   it('returns default-enabled registry agents', () => {
@@ -241,6 +242,13 @@ describe('command builders', () => {
     expect(getSendKeysSubmit('grok')).toEqual(['Enter']);
     expect(getSendKeysPostPasteDelayMs('grok')).toBe(150);
     expect(getSendKeysReadyDelayMs('grok')).toBe(1600);
+  });
+
+  it('uses Antigravity interactive prompt mode for initial prompts', () => {
+    expect(getPromptTransport('antigravity')).toBe('option');
+    expect(buildInitialPromptCommand('antigravity', '"fix it"', 'bypassPermissions')).toBe(
+      'agy --dangerously-skip-permissions --prompt-interactive "fix it"'
+    );
   });
 
   it('builds grok resume command scoped to the current directory', () => {

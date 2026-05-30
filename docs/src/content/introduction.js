@@ -55,6 +55,10 @@ export function render() {
         <img src="/agents/crush.svg" alt="Crush" class="agent-cloud-logo" />
         <span>Crush</span>
       </a>
+      <a href="#/agents" class="agent-cloud-item">
+        <img src="/agents/antigravity.svg" alt="Antigravity CLI" class="agent-cloud-logo" />
+        <span>Antigravity</span>
+      </a>
     </div>
 
     <div class="video-wrap">
