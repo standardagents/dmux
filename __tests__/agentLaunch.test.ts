@@ -34,6 +34,7 @@ describe('agent launch utils', () => {
     expect(getAgentSlugSuffix('codex')).toBe('codex');
     expect(getAgentSlugSuffix('grok')).toBe('grok-build');
     expect(getAgentSlugSuffix('gemini')).toBe('gemini');
+    expect(getAgentSlugSuffix('deepcode')).toBe('deepcode');
   });
 
   it('returns default-enabled registry agents', () => {
@@ -186,6 +187,16 @@ describe('getPermissionFlags', () => {
       expect(getPermissionFlags('gemini', 'bypassPermissions')).toBe('--approval-mode yolo');
     });
   });
+
+  describe('deepcode', () => {
+    it('returns no flags for all modes', () => {
+      expect(getPermissionFlags('deepcode', '')).toBe('');
+      expect(getPermissionFlags('deepcode', undefined)).toBe('');
+      expect(getPermissionFlags('deepcode', 'plan')).toBe('');
+      expect(getPermissionFlags('deepcode', 'acceptEdits')).toBe('');
+      expect(getPermissionFlags('deepcode', 'bypassPermissions')).toBe('');
+    });
+  });
 });
 
 describe('command builders', () => {
@@ -216,6 +227,16 @@ describe('command builders', () => {
     expect(getSendKeysSubmit('crush')).toEqual(['Enter']);
     expect(getSendKeysPostPasteDelayMs('crush')).toBe(200);
     expect(getSendKeysReadyDelayMs('crush')).toBe(1200);
+  });
+
+  it('uses send-keys startup mode for deepcode initial prompts', () => {
+    expect(getPromptTransport('deepcode')).toBe('send-keys');
+    expect(buildInitialPromptCommand('deepcode', '"fix it"', '')).toBe(
+      'deepcode'
+    );
+    expect(getSendKeysSubmit('deepcode')).toEqual(['Enter']);
+    expect(getSendKeysPostPasteDelayMs('deepcode')).toBe(200);
+    expect(getSendKeysReadyDelayMs('deepcode')).toBe(2000);
   });
 
   it('uses send-keys startup mode for cline initial prompts', () => {

@@ -24,6 +24,7 @@ export const AGENT_IDS = [
   'cursor',
   'copilot',
   'crush',
+  'deepcode',
 ] as const;
 
 export type AgentName = typeof AGENT_IDS[number];
@@ -349,6 +350,28 @@ export const AGENT_REGISTRY: Readonly<Record<AgentName, AgentRegistryEntry>> = {
     permissionFlags: {
       bypassPermissions: '--yolo',
     },
+    defaultEnabled: false,
+  },
+  deepcode: {
+    id: 'deepcode',
+    name: 'Deep Code',
+    shortLabel: 'dc',
+    description: 'Deep Code CLI (deepseek-v4)',
+    slugSuffix: 'deepcode',
+    installTestCommand: 'command -v deepcode 2>/dev/null || which deepcode 2>/dev/null',
+    commonPaths: [
+      ...homePath('.local/bin/deepcode'),
+      '/usr/local/bin/deepcode',
+      '/opt/homebrew/bin/deepcode',
+      ...homePath('.npm-global/bin/deepcode'),
+      ...homePath('bin/deepcode'),
+    ],
+    promptCommand: 'deepcode',
+    promptTransport: 'send-keys',
+    sendKeysSubmit: ['Enter'],
+    sendKeysPostPasteDelayMs: 200,
+    sendKeysReadyDelayMs: 2000,
+    permissionFlags: {},
     defaultEnabled: false,
   },
 };
