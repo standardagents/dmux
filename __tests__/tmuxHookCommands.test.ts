@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildGuardedSignalCommand,
   buildPaneExitedHookCommandForSession,
   buildPaneFocusHookCommandForSession,
 } from '../src/utils/tmuxHookCommands.js';
@@ -29,7 +30,30 @@ describe('tmuxHookCommands', () => {
     expect(command).toContain('if-shell -F "#{!=:#{@dmux_active_border_style},}"');
     expect(command).toContain('set-option -F -t \\"my\\"session\\$\\`x\\\\y\\" pane-active-border-style');
     expect(command).toContain('#{@dmux_active_border_style}');
-    expect(command).toContain('run-shell -b "kill -USR2 99 2>/dev/null || true # dmux-hook"');
+    expect(command).toContain('kill -USR2 99 2>/dev/null || true # dmux-hook"');
     expect(command).not.toContain('show-options -p -v');
+  });
+
+  it('guards the signal on the PID still being this dmux process', () => {
+    const command = buildGuardedSignalCommand(4321, 'USR1');
+
+    // A hook that outlives dmux would otherwise signal whatever inherits the
+    // recycled PID, and SIGUSR1 defaults to terminate.
+    expect(command).toContain('ps -p 4321 -o command=');
+    expect(command).toContain('grep -qF');
+    expect(command).toContain(process.argv[1]!);
+    expect(command).toContain('kill -USR1 4321');
+  });
+
+  it('falls back to a bare kill when the entry path is unknown', () => {
+    const previous = process.argv[1];
+    // @ts-expect-error - deliberately simulating an unknown entry path
+    process.argv[1] = undefined;
+
+    try {
+      expect(buildGuardedSignalCommand(7, 'USR2')).toBe('kill -USR2 7 2>/dev/null || true');
+    } finally {
+      process.argv[1] = previous;
+    }
   });
 });

@@ -29,6 +29,7 @@ import { atomicWriteJson } from './utils/atomicWrite.js';
 import { buildDevWatchCommand, buildDevWatchRespawnCommand } from './utils/devWatchCommand.js';
 import { shouldUseQuietDevWatchExit } from './utils/devWatchExit.js';
 import {
+  buildGuardedSignalCommand,
   buildPaneExitedHookCommandForSession,
   buildPaneFocusHookCommandForSession,
 } from './utils/tmuxHookCommands.js';
@@ -1323,7 +1324,8 @@ class Dmux {
       // Set up session-specific hook that sends SIGUSR1 to dmux process on resize
       // This works inside tmux where normal SIGWINCH may not propagate
       const pid = process.pid;
-      execSync(`tmux set-hook -t '${sessionName}' client-resized 'run-shell "kill -USR1 ${pid} 2>/dev/null || true"'`, { stdio: 'pipe' });
+      const notify = buildGuardedSignalCommand(pid, 'USR1').replace(/[\\$"`]/g, '\\$&');
+      execSync(`tmux set-hook -t '${sessionName}' client-resized 'run-shell "${notify}"'`, { stdio: 'pipe' });
       // LogService.getInstance().debug(`Set up resize hook for session ${this.sessionName}`, 'Setup');
     } catch (error) {
       LogService.getInstance().warn('Failed to set up resize hook', 'Setup');
