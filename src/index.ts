@@ -1484,6 +1484,27 @@ class Dmux {
 
 // Validate system requirements before starting
 (async () => {
+  // Answer these before touching tmux: otherwise `dmux --version` starts the
+  // full TUI and creates a session for whatever directory it was run from.
+  const args = process.argv.slice(2);
+  if (args.includes('--version') || args.includes('-v')) {
+    console.log(packageJson.version);
+    process.exit(0);
+  }
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`dmux ${packageJson.version}
+
+Usage: dmux [options]
+
+Options:
+  -v, --version                 Print the version and exit
+  -h, --help                    Print this help and exit
+      --files-only              Open the file browser instead of the session UI
+      --remote-pane-action <s>  Queue a pane action against the running controller
+`);
+    process.exit(0);
+  }
+
   if (isFilesOnlyMode()) {
     render(React.createElement(FileBrowserApp), { exitOnCtrlC: false });
     return;
