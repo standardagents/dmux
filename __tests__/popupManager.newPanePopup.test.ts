@@ -121,13 +121,19 @@ describe('PopupManager launchNewPanePopup', () => {
 
     await manager.launchNewPanePopup(tempRoot);
 
-    expect(manager.launchPopup).toHaveBeenCalledWith(
-      'newPanePopup.js',
-      [tempRoot, '0', '1'],
-      expect.any(Object),
-      undefined,
-      tempRoot
-    );
+    expect(manager.launchPopup).toHaveBeenCalledTimes(1);
+    const [scriptName, popupArgs, popupOptions, popupData, popupProjectRoot] =
+      manager.launchPopup.mock.calls[0];
+
+    expect(scriptName).toBe('newPanePopup.js');
+    expect(popupArgs).toEqual([
+      tempRoot,
+      expect.any(String),
+      '1',
+    ]);
+    expect(popupOptions).toEqual(expect.any(Object));
+    expect(popupData).toBeUndefined();
+    expect(popupProjectRoot).toBe(tempRoot);
   });
 
   it('disables git options when caller requests allowGitOptions=false', async () => {
@@ -176,6 +182,25 @@ describe('PopupManager launchNewPanePopup', () => {
       prompt: 'prompt',
       branchName: 'feat/LIN-8',
       goalMode: true,
+    });
+  });
+
+  it('normalizes linked nested repo selections from popup payloads', async () => {
+    const manager = createPopupManager({ promptForGitOptionsOnCreate: true }) as any;
+    manager.checkPopupSupport = vi.fn(() => true);
+    manager.launchPopup = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        prompt: 'prompt',
+        linkedRepoPaths: [' external/web ', 'packages/docs', 'external/web'],
+      },
+    });
+
+    const result = await manager.launchNewPanePopup('/tmp/project');
+
+    expect(result).toEqual({
+      prompt: 'prompt',
+      linkedRepoPaths: ['external/web', 'packages/docs'],
     });
   });
 

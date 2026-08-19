@@ -29,6 +29,7 @@ import {
 } from './promptStore.js';
 import { triggerHookWithProgress, initializeHooksDirectory } from './hooks.js';
 import { writeWorktreeMetadata } from './worktreeMetadata.js';
+import { ensureWorkspaceWorktrees, type WorkspaceWorktreeTarget } from './linkedWorktrees.js';
 import { ensureGeminiFolderTrusted } from './geminiTrust.js';
 import {
   buildCodexHookedCommand,
@@ -455,18 +456,10 @@ async function commandSucceeds(command: string, args: string[], cwd: string): Pr
   return result.code === 0;
 }
 
-async function prepareWorktree(config: PaneBootstrapConfig): Promise<void> {
-  if (config.existingWorktree) {
-    if (!fs.existsSync(path.join(config.worktreePath, '.git'))) {
-      throw new Error(`Existing worktree not found at ${config.worktreePath}`);
-    }
-    return;
+async function prepareWorktree(config: PaneBootstrapConfig): Promise<WorkspaceWorktreeTarget[]> {
+  if (config.existingWorktree && !fs.existsSync(path.join(config.worktreePath, '.git'))) {
+    throw new Error(`Existing worktree not found at ${config.worktreePath}`);
   }
-
-  await runCommand('git', ['worktree', 'prune'], {
-    cwd: config.projectRoot,
-    allowFailure: true,
-  });
 
   if (config.resolvedStartPoint) {
     const startPointExists = await commandSucceeds(
@@ -479,33 +472,14 @@ async function prepareWorktree(config: PaneBootstrapConfig): Promise<void> {
     }
   }
 
-  if (fs.existsSync(config.worktreePath)) {
-    if (fs.existsSync(path.join(config.worktreePath, '.git'))) {
-      return;
-    }
-    throw new Error(`Path already exists and is not a git worktree: ${config.worktreePath}`);
-  }
-
-  fs.mkdirSync(path.dirname(config.worktreePath), { recursive: true });
-
-  const branchExists = await commandSucceeds(
-    'git',
-    ['show-ref', '--verify', '--quiet', `refs/heads/${config.branchName}`],
-    config.projectRoot
-  );
-
-  const args = branchExists
-    ? ['worktree', 'add', config.worktreePath, config.branchName]
-    : [
-        'worktree',
-        'add',
-        config.worktreePath,
-        '-b',
-        config.branchName,
-        ...(config.resolvedStartPoint ? [config.resolvedStartPoint] : []),
-      ];
-
-  await runCommand('git', args, { cwd: config.projectRoot });
+  return ensureWorkspaceWorktrees({
+    projectRoot: config.projectRoot,
+    rootWorktreePath: config.worktreePath,
+    branchName: config.branchName,
+    linkedRepoPaths: config.metadata.linkedRepoPaths,
+    preferredStartPoint: config.resolvedStartPoint,
+    fallbackStartPointMode: 'current-head',
+  });
 }
 
 async function sendInteractivePrompt(config: PaneBootstrapConfig): Promise<void> {
@@ -546,6 +520,54 @@ async function sendInteractivePrompt(config: PaneBootstrapConfig): Promise<void>
       await tmuxService.deleteBuffer(bufferName);
     } catch {
       // Best-effort cleanup.
+    }
+  }
+}
+
+function writeLinkedWorktreeMetadata(
+  config: PaneBootstrapConfig,
+  targets: WorkspaceWorktreeTarget[]
+): void {
+  for (const target of targets) {
+    if (target.isRoot) {
+      continue;
+    }
+
+    writeWorktreeMetadata(target.worktreePath, {
+      branchName: config.branchName !== config.slug ? config.branchName : undefined,
+    });
+  }
+}
+
+async function runChildWorktreeHooks(
+  config: PaneBootstrapConfig,
+  targets: WorkspaceWorktreeTarget[]
+): Promise<void> {
+  for (const target of targets) {
+    if (target.isRoot) {
+      continue;
+    }
+
+    const hookResult = await triggerHookWithProgress(
+      'worktree_created',
+      target.repoPath,
+      undefined,
+      {
+        ...config.hookExtraEnv,
+        DMUX_PROGRESS: '1',
+        DMUX_STATUS_PREFIX: 'DMUX_STATUS:',
+        DMUX_SLUG: config.slug,
+        DMUX_PROMPT: config.prompt || 'No initial prompt',
+        DMUX_AGENT: config.agent || 'unknown',
+        DMUX_WORKTREE_PATH: target.worktreePath,
+        DMUX_BRANCH: config.branchName,
+      },
+      (event) => appendProgressLine(event.line, event.stream),
+      BOOTSTRAP_HOOK_TIMEOUT_MS
+    );
+
+    if (!hookResult.success) {
+      throw new Error(hookResult.error || 'linked worktree_created hook failed');
     }
   }
 }
@@ -706,11 +728,14 @@ async function main(): Promise<number> {
 
   try {
     setStep(config, steps, 'worktree', 'active');
-    await prepareWorktree(config);
-    setStep(config, steps, 'worktree', 'done', config.worktreePath);
+    const workspaceTargets = await prepareWorktree(config);
+    setStep(config, steps, 'worktree', 'done', workspaceTargets.length > 1
+      ? `${config.worktreePath} (+${workspaceTargets.length - 1} linked)`
+      : config.worktreePath);
 
     setStep(config, steps, 'metadata', 'active');
     writeWorktreeMetadata(config.worktreePath, config.metadata);
+    writeLinkedWorktreeMetadata(config, workspaceTargets);
     setStep(config, steps, 'metadata', 'done');
 
     if (config.isHooksEditingSession) {
@@ -735,6 +760,11 @@ async function main(): Promise<number> {
     if (!hookResult.success) {
       throw new Error(hookResult.error || 'worktree_created hook failed');
     }
+
+    if (!config.existingWorktree) {
+      await runChildWorktreeHooks(config, workspaceTargets);
+    }
+
     setStep(config, steps, 'worktree-hook', 'done');
 
     if (config.agent === 'gemini') {

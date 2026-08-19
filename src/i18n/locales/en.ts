@@ -57,6 +57,8 @@ const en: Translations = {
     noPrefix: 'No prefix (default)',
     promptForGitOptionsOnCreate: 'Ask Git Options on Create',
     promptForGitOptionsOnCreateDescription: 'When enabled, new-pane popup asks for optional base branch and branch/worktree name overrides.',
+    linkedRepoPaths: 'Linked Nested Repos',
+    linkedRepoPathsDescription: 'Project-scoped relative repo paths (comma or newline separated) that should get matching worktrees in each pane.',
     minPaneWidth: 'Min Pane Width',
     minPaneWidthDescription: 'Global minimum content-pane width in characters used during layout fitting.',
     maxPaneWidth: 'Max Pane Width',

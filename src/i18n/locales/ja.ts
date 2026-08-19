@@ -57,6 +57,8 @@ const ja: Translations = {
     noPrefix: 'プレフィックスなし（デフォルト）',
     promptForGitOptionsOnCreate: '作成時にGitオプションを確認',
     promptForGitOptionsOnCreateDescription: '有効にすると、新しいペインのポップアップで任意のベースブランチとブランチ/ワークツリー名の上書きを確認します。',
+    linkedRepoPaths: '連携ネストリポジトリ',
+    linkedRepoPathsDescription: '各ペインで同名ワークツリーを作成する、プロジェクトスコープの相対リポジトリパスです（カンマ区切りまたは改行区切り）。',
     minPaneWidth: '最小ペイン幅',
     minPaneWidthDescription: 'レイアウトフィッティング時に使用されるグローバルなコンテンツペインの最小幅（文字数）です。',
     maxPaneWidth: '最大ペイン幅',

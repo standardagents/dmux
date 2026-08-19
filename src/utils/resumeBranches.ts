@@ -9,6 +9,7 @@ import { getOrphanedWorktrees, isValidBranchName } from './git.js';
 import { createPane } from './paneCreation.js';
 import { shellQuote } from './promptStore.js';
 import { SettingsManager } from './settingsManager.js';
+import { getConfiguredLinkedRepoPaths, getWorkspaceRepoReferences } from './linkedWorktrees.js';
 import { writeWorktreeMetadata } from './worktreeMetadata.js';
 
 const REMOTE_FALLBACK = 'origin';
@@ -155,36 +156,10 @@ function isGitRepoRoot(dirPath: string): boolean {
 }
 
 function discoverWorkspaceRepos(projectRoot: string): string[] {
-  const discovered = new Set<string>([projectRoot]);
-
-  const walk = (dirPath: string) => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dirPath, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
-      if (RESUME_SCAN_EXCLUDED_DIRS.has(entry.name)) {
-        continue;
-      }
-
-      const fullPath = path.join(dirPath, entry.name);
-      if (isGitRepoRoot(fullPath)) {
-        discovered.add(fullPath);
-      }
-
-      walk(fullPath);
-    }
-  };
-
-  walk(projectRoot);
-
-  return Array.from(discovered).sort((left, right) => left.length - right.length);
+  return getWorkspaceRepoReferences(
+    projectRoot,
+    getConfiguredLinkedRepoPaths(projectRoot)
+  ).map((reference) => reference.repoPath);
 }
 
 function listLocalBranches(repoPath: string): Set<string> {
@@ -961,6 +936,7 @@ export async function resumeBranchWorkspace(
     sessionProjectRoot,
   } = options;
 
+  const linkedRepoPaths = getConfiguredLinkedRepoPaths(projectRoot);
   const workspaceStates = await getWorkspaceBranchStatesAsync(projectRoot, branchName);
   const slug = getAvailableSlug(branchName, projectRoot, existingPanes);
   const rootWorktreePath = path.join(projectRoot, '.dmux', 'worktrees', slug);
@@ -986,6 +962,9 @@ export async function resumeBranchWorkspace(
       ...(agent && !state.relativePath ? { agent } : {}),
       permissionMode: state.relativePath ? undefined : settings.permissionMode,
       branchName: branchName !== slug ? branchName : undefined,
+      linkedRepoPaths: !state.relativePath && linkedRepoPaths.length > 0
+        ? linkedRepoPaths
+        : undefined,
     });
   }
 

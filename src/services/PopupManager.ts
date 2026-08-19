@@ -48,6 +48,7 @@ import {
   SIDEBAR_PROJECT_COLOR_THEME_SETTING_KEY,
 } from "../utils/sidebarProjects.js"
 import { resolveProjectColorTheme } from "../utils/paneColors.js"
+import { normalizeLinkedRepoPathsArray } from "../utils/linkedRepoConfig.js"
 import type {
   ReopenWorktreePopupResult,
   ReopenWorktreePopupState,
@@ -354,6 +355,12 @@ export class PopupManager {
     }
     if (typeof candidate.goalMode === "boolean") {
       normalized.goalMode = candidate.goalMode
+    }
+    if (Array.isArray(candidate.linkedRepoPaths)) {
+      const linkedRepoPaths = normalizeLinkedRepoPathsArray(
+        candidate.linkedRepoPaths.filter((value): value is string => typeof value === "string")
+      )
+      normalized.linkedRepoPaths = linkedRepoPaths
     }
 
     return normalized

@@ -307,6 +307,7 @@ describe('Pane Lifecycle Integration Tests', () => {
           agent: 'claude',
           projectName: 'test-project',
           existingPanes: [],
+          slugBase: 'add-user',
         },
         ['claude']
       );
@@ -323,6 +324,60 @@ describe('Pane Lifecycle Integration Tests', () => {
       expect(mockExecSync.mock.calls.some(([cmd]) =>
         typeof cmd === 'string' && cmd.includes('git worktree add')
       )).toBe(false);
+    });
+
+    it('passes configured linked nested repos into the pane bootstrap config', async () => {
+      fsMock.readFileSync.mockImplementation((target) => {
+        const value = String(target);
+        if (value.endsWith('/.dmux/settings.json')) {
+          return JSON.stringify({ linkedRepoPaths: 'packages/docs\nservices/api' });
+        }
+        if (value.endsWith('/.dmux/dmux.config.json')) {
+          return JSON.stringify({ controlPaneId: '%0' });
+        }
+        return JSON.stringify({});
+      });
+
+      const { createPane } = await import('../../src/utils/paneCreation.js');
+
+      await createPane(
+        {
+          prompt: 'open linked workspace',
+          agent: 'claude',
+          projectName: 'test-project',
+          existingPanes: [],
+          slugBase: 'linked-workspace',
+        },
+        ['claude']
+      );
+
+      const bootstrapConfig = getLatestBootstrapConfig();
+      expect(bootstrapConfig.metadata.linkedRepoPaths).toEqual([
+        'packages/docs',
+        'services/api',
+      ]);
+    });
+
+    it('passes explicit linked nested repo selections into the pane bootstrap config', async () => {
+      const { createPane } = await import('../../src/utils/paneCreation.js');
+
+      await createPane(
+        {
+          prompt: 'open selected linked repos',
+          agent: 'claude',
+          projectName: 'test-project',
+          existingPanes: [],
+          slugBase: 'linked-selection',
+          linkedRepoPaths: ['external/infinite-canvas-web', 'backend/docs-ui'],
+        },
+        ['claude']
+      );
+
+      const bootstrapConfig = getLatestBootstrapConfig();
+      expect(bootstrapConfig.metadata.linkedRepoPaths).toEqual([
+        'external/infinite-canvas-web',
+        'backend/docs-ui',
+      ]);
     });
 
     it('passes remote tracking baseBranch values to bootstrap without forcing refs/heads', async () => {

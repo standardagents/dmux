@@ -156,6 +156,8 @@ export interface DmuxSettings {
   branchPrefix?: string;
   // Whether new pane popup should ask for base/branch overrides
   promptForGitOptionsOnCreate?: boolean;
+  // Linked child repositories to manage alongside the root repo (newline/comma-delimited relative paths)
+  linkedRepoPaths?: string;
   // Preferred minimum content pane width in characters
   minPaneWidth?: number;
   // Preferred maximum content pane width in characters
@@ -173,6 +175,7 @@ export interface NewPaneInput {
   baseBranch?: string;
   branchName?: string;
   goalMode?: boolean;
+  linkedRepoPaths?: string[];
 }
 
 export type SettingsScope = 'global' | 'project';

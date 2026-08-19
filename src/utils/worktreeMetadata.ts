@@ -8,6 +8,7 @@ import {
 } from './agentLaunch.js';
 import { atomicWriteJsonSync } from './atomicWrite.js';
 import { sanitizePaneDisplayName } from './paneTitle.js';
+import { validateLinkedRepoPathsSetting } from './linkedRepoConfig.js';
 
 export interface WorktreeMetadata {
   agent?: AgentName;
@@ -16,6 +17,7 @@ export interface WorktreeMetadata {
   displayName?: string;
   branchName?: string;
   mergeTargetChain?: MergeTargetReference[];
+  linkedRepoPaths?: string[];
 }
 
 const METADATA_DIR = '.dmux';
@@ -48,6 +50,22 @@ function isMergeTargetReference(value: unknown): value is MergeTargetReference {
   }
 
   return true;
+}
+
+function normalizeLinkedRepoPaths(linkedRepoPaths: unknown): string[] | undefined {
+  if (!Array.isArray(linkedRepoPaths)) return undefined;
+
+  const normalized = linkedRepoPaths
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  try {
+    const validated = validateLinkedRepoPathsSetting(normalized.join('\n'));
+    return validated;
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeMergeTargetChain(
@@ -109,6 +127,11 @@ export function readWorktreeMetadata(worktreePath: string): WorktreeMetadata | n
       metadata.mergeTargetChain = mergeTargetChain;
     }
 
+    const linkedRepoPaths = normalizeLinkedRepoPaths(parsed.linkedRepoPaths);
+    if (linkedRepoPaths) {
+      metadata.linkedRepoPaths = linkedRepoPaths;
+    }
+
     return metadata;
   } catch {
     return null;
@@ -125,6 +148,9 @@ export function writeWorktreeMetadata(
     ...metadata,
     displayName: metadata.displayName
       ? sanitizePaneDisplayName(metadata.displayName)
+      : undefined,
+    linkedRepoPaths: metadata.linkedRepoPaths !== undefined
+      ? validateLinkedRepoPathsSetting(metadata.linkedRepoPaths.join('\n'))
       : undefined,
   });
 }

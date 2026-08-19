@@ -6,6 +6,10 @@ vi.mock('child_process', () => ({
   execSync: vi.fn(),
 }));
 
+vi.mock('../src/utils/worktreeMetadata.js', () => ({
+  readWorktreeMetadata: vi.fn(() => null),
+}));
+
 describe('mergeValidation', () => {
   beforeEach(() => {
     vi.mocked(execSync).mockReset();
@@ -59,6 +63,45 @@ describe('mergeValidation', () => {
       hasChanges: true,
       files: ['src/index.ts', 'package.json'],
       summary: 'M src/index.ts\nM package.json',
+    });
+  });
+
+  it('ignores linked nested repo paths when checking root repo status', async () => {
+    const { readWorktreeMetadata } = await import('../src/utils/worktreeMetadata.js');
+    vi.mocked(readWorktreeMetadata).mockReturnValue({
+      linkedRepoPaths: ['backend', 'frontend'],
+    });
+
+    vi.mocked(execSync).mockReturnValue(
+      ' M backend\n M frontend\nM src/index.ts\n'
+    );
+
+    const status = getGitStatus('/repo');
+
+    expect(status).toEqual({
+      hasChanges: true,
+      files: ['src/index.ts'],
+      summary: 'M src/index.ts',
+    });
+  });
+
+  it('ignores untracked agent hook state scaffolding', () => {
+    vi.mocked(execSync).mockReturnValue(
+      [
+        '?? .codex/',
+        '?? .codex/hooks.json',
+        '?? .codex/hooks/dmux-stop-hook.cjs',
+        '?? .claude/',
+        '?? .claude/settings.local.json',
+      ].join('\n')
+    );
+
+    const status = getGitStatus('/repo');
+
+    expect(status).toEqual({
+      hasChanges: false,
+      files: [],
+      summary: '',
     });
   });
 });

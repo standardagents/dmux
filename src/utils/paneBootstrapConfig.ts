@@ -25,6 +25,7 @@ export interface PaneBootstrapConfig {
     displayName?: string;
     branchName?: string;
     mergeTargetChain?: DmuxPane['mergeTargetChain'];
+    linkedRepoPaths?: string[];
   };
   hookExtraEnv?: Record<string, string>;
 }

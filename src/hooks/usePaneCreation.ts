@@ -25,6 +25,7 @@ interface CreateNewPaneOptions {
   baseBranchOverride?: string;
   branchNameOverride?: string;
   goalMode?: boolean;
+  linkedRepoPaths?: string[];
   targetProjectRoot?: string;
   skipAgentSelection?: boolean;
   startPointBranch?: string;
@@ -106,6 +107,7 @@ export default function usePaneCreation({
         baseBranchOverride: options.baseBranchOverride,
         branchNameOverride: options.branchNameOverride,
         goalMode: options.goalMode,
+        linkedRepoPaths: options.linkedRepoPaths,
         projectRoot: options.targetProjectRoot,
         skipAgentSelection: options.skipAgentSelection,
         startPointBranch: options.startPointBranch,
@@ -135,6 +137,7 @@ export default function usePaneCreation({
       baseBranchOverride: options.baseBranchOverride ?? paneInput.baseBranch,
       branchNameOverride: options.branchNameOverride ?? paneInput.branchName,
       goalMode: options.goalMode ?? paneInput.goalMode,
+      linkedRepoPaths: options.linkedRepoPaths ?? paneInput.linkedRepoPaths,
     };
 
     try {
@@ -202,6 +205,7 @@ export default function usePaneCreation({
         baseBranchOverride: paneInput.baseBranch,
         branchNameOverride: paneInput.branchName,
         goalMode: paneInput.goalMode,
+        linkedRepoPaths: paneInput.linkedRepoPaths,
         targetProjectRoot: options.targetProjectRoot,
         startPointBranch: options.startPointBranch,
         mergeTargetChain: options.mergeTargetChain,
@@ -231,6 +235,7 @@ export default function usePaneCreation({
               baseBranchOverride: paneInput.baseBranch,
               branchNameOverride: paneInput.branchName,
               goalMode: paneInput.goalMode,
+              linkedRepoPaths: paneInput.linkedRepoPaths,
               targetProjectRoot: options.targetProjectRoot,
               startPointBranch: options.startPointBranch,
               mergeTargetChain: options.mergeTargetChain,

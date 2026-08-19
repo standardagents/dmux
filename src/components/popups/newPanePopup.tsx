@@ -36,6 +36,12 @@ import {
   getPreviousNewPaneField,
   type NewPaneField,
 } from "./newPaneFieldNavigation.js"
+import { SettingsManager } from "../../utils/settingsManager.js"
+import {
+  discoverLinkedRepoPaths,
+  normalizeLinkedRepoPathsArray,
+  resolveLinkedRepoReferences,
+} from "../../utils/linkedRepoConfig.js"
 import fs from "fs"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -65,10 +71,13 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
   const [mode, setMode] = useState<'prompt' | 'gitOptions'>('prompt')
   const [baseBranch, setBaseBranch] = useState("")
   const [branchName, setBranchName] = useState("")
-  const [activeGitField, setActiveGitField] = useState<'baseBranch' | 'branchName'>('baseBranch')
+  const [activeGitField, setActiveGitField] = useState<'baseBranch' | 'branchName' | 'linkedRepos'>('baseBranch')
   const [availableBranches, setAvailableBranches] = useState<string[]>([])
   const [filteredBranches, setFilteredBranches] = useState<string[]>([])
   const [selectedBranchIndex, setSelectedBranchIndex] = useState(0)
+  const [availableLinkedRepos, setAvailableLinkedRepos] = useState<string[]>([])
+  const [selectedLinkedRepos, setSelectedLinkedRepos] = useState<string[]>([])
+  const [selectedLinkedRepoIndex, setSelectedLinkedRepoIndex] = useState(0)
   const [gitOptionsError, setGitOptionsError] = useState<string | null>(null)
   const [pendingClearEsc, setPendingClearEsc] = useState(false)
   const { exit } = useApp()
@@ -81,6 +90,7 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
   const [atPosition, setAtPosition] = useState(-1) // Position of @ in text
   const [cursorPosition, setCursorPosition] = useState<number | undefined>(undefined)
   const [currentCursor, setCurrentCursor] = useState(0) // Track cursor position from CleanTextInput
+  const hasLinkedRepoOptions = availableLinkedRepos.length > 0
 
   const getCurrentField = (): NewPaneField =>
     mode === 'prompt' ? 'prompt' : activeGitField
@@ -95,6 +105,21 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
     setActiveGitField(field)
   }
 
+  const moveGitFieldFocus = (direction: 'next' | 'previous') => {
+    const resolver = direction === 'next'
+      ? getNextNewPaneField
+      : getPreviousNewPaneField
+    setCurrentField(resolver(getCurrentField(), { hasLinkedRepos: hasLinkedRepoOptions }))
+  }
+
+  const toggleLinkedRepo = (relativePath: string) => {
+    setSelectedLinkedRepos((current) => (
+      current.includes(relativePath)
+        ? current.filter((candidate) => candidate !== relativePath)
+        : [...current, relativePath]
+    ))
+  }
+
   const writeSuccessResult = () => {
     const trimmedBaseBranch = baseBranch.trim()
     if (!isValidBaseBranchOverride(trimmedBaseBranch, availableBranches)) {
@@ -102,7 +127,13 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
       return
     }
 
-    const payload: { prompt: string; baseBranch?: string; branchName?: string; goalMode: boolean } = {
+    const payload: {
+      prompt: string;
+      baseBranch?: string;
+      branchName?: string;
+      goalMode: boolean;
+      linkedRepoPaths?: string[];
+    } = {
       prompt,
       goalMode,
     }
@@ -111,6 +142,9 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
 
     if (trimmedBaseBranch) payload.baseBranch = trimmedBaseBranch
     if (trimmedBranchName) payload.branchName = trimmedBranchName
+    if (hasLinkedRepoOptions) {
+      payload.linkedRepoPaths = normalizeLinkedRepoPathsArray(selectedLinkedRepos)
+    }
 
     writeSuccessAndExit(resultFile, payload, exit)
   }
@@ -122,6 +156,29 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
 
     const branches = loadLocalBranchNames(FILE_SCAN_ROOT)
     setAvailableBranches(branches)
+
+    const configuredLinkedRepoPaths = normalizeLinkedRepoPathsArray(
+      (() => {
+        try {
+          return resolveLinkedRepoReferences(
+            FILE_SCAN_ROOT,
+            new SettingsManager(FILE_SCAN_ROOT).getSettings().linkedRepoPaths
+          ).map((reference) => reference.relativePath)
+        } catch {
+          return []
+        }
+      })()
+    )
+    const discoveredLinkedRepos = discoverLinkedRepoPaths(FILE_SCAN_ROOT)
+    const selectableLinkedRepos = Array.from(new Set([
+      ...configuredLinkedRepoPaths,
+      ...discoveredLinkedRepos,
+    ])).sort((left, right) => left.localeCompare(right))
+
+    setAvailableLinkedRepos(selectableLinkedRepos)
+    setSelectedLinkedRepos(
+      configuredLinkedRepoPaths.length > 0 ? configuredLinkedRepoPaths : selectableLinkedRepos
+    )
   }, [])
 
   useEffect(() => {
@@ -141,7 +198,11 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
     if (gitOptionsError) {
       setGitOptionsError(null)
     }
-  }, [baseBranch, branchName])
+  }, [baseBranch, branchName, selectedLinkedRepos])
+
+  useEffect(() => {
+    setSelectedLinkedRepoIndex((previous) => clampSelectedIndex(previous, availableLinkedRepos.length))
+  }, [availableLinkedRepos.length])
 
   const resetPendingClearEsc = () => {
     if (clearEscTimeoutRef.current) {
@@ -308,12 +369,24 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
             setBaseBranch('')
           } else if (branchName.length > 0) {
             setActiveGitField('branchName')
+          } else if (hasLinkedRepoOptions) {
+            setActiveGitField('linkedRepos')
+          } else {
+            setMode('prompt')
+          }
+        } else if (activeGitField === 'branchName') {
+          if (branchName.length > 0) {
+            setBranchName('')
+          } else if (baseBranch.length > 0) {
+            setActiveGitField('baseBranch')
+          } else if (hasLinkedRepoOptions) {
+            setActiveGitField('linkedRepos')
           } else {
             setMode('prompt')
           }
         } else {
           if (branchName.length > 0) {
-            setBranchName('')
+            setActiveGitField('branchName')
           } else if (baseBranch.length > 0) {
             setActiveGitField('baseBranch')
           } else {
@@ -330,8 +403,12 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
           setSelectedBranchIndex((prev) => Math.max(0, prev - 1))
           return
         }
+        if (activeGitField === 'linkedRepos' && availableLinkedRepos.length > 0) {
+          setSelectedLinkedRepoIndex((prev) => Math.max(0, prev - 1))
+          return
+        }
 
-        setActiveGitField('baseBranch')
+        moveGitFieldFocus('previous')
         return
       }
 
@@ -342,23 +419,45 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
           setSelectedBranchIndex((prev) => Math.min(filteredBranches.length - 1, prev + 1))
           return
         }
+        if (activeGitField === 'linkedRepos' && availableLinkedRepos.length > 0) {
+          setSelectedLinkedRepoIndex((prev) => Math.min(availableLinkedRepos.length - 1, prev + 1))
+          return
+        }
 
-        setActiveGitField('branchName')
+        moveGitFieldFocus('next')
         return
       }
 
       // Tab and Shift+Tab cycle across prompt/base/branch fields.
       if (isForwardTab || isBackTab) {
-        const nextField = isForwardTab
-          ? getNextNewPaneField(getCurrentField())
-          : getPreviousNewPaneField(getCurrentField())
-        setCurrentField(nextField)
+        moveGitFieldFocus(isForwardTab ? 'next' : 'previous')
         return
+      }
+
+      if (activeGitField === 'linkedRepos') {
+        if (input === ' ') {
+          const relativePath = availableLinkedRepos[selectedLinkedRepoIndex]
+          if (relativePath) {
+            toggleLinkedRepo(relativePath)
+          }
+          return
+        }
+
+        if (input.toLowerCase() === 'a') {
+          setSelectedLinkedRepos(availableLinkedRepos)
+          return
+        }
+
+        if (input.toLowerCase() === 'n') {
+          setSelectedLinkedRepos([])
+          return
+        }
       }
 
       // Enter is a two-step action:
       // - on base field: accept highlighted/exact branch, then move to branch field
-      // - on branch field: submit both overrides + prompt payload
+      // - on branch field: move to linked repos (when available) or submit
+      // - on linked repos: submit prompt + overrides + selected repos
       if (key.return) {
         if (activeGitField === 'baseBranch') {
           const resolution = resolveBaseBranchEnter({
@@ -375,6 +474,8 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
 
           setBaseBranch(resolution.nextValue)
           setActiveGitField('branchName')
+        } else if (activeGitField === 'branchName' && hasLinkedRepoOptions) {
+          setActiveGitField('linkedRepos')
         } else {
           writeSuccessResult()
         }
@@ -397,10 +498,7 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
     // With git options enabled, Tab/Shift+Tab also cycle into git fields
     // from the prompt editor when file autocomplete is not active.
     if (ENABLE_GIT_OPTIONS_ARG && !isFileListActive && (isForwardTab || isBackTab)) {
-      const nextField = isForwardTab
-        ? getNextNewPaneField(getCurrentField())
-        : getPreviousNewPaneField(getCurrentField())
-      setCurrentField(nextField)
+      moveGitFieldFocus(isForwardTab ? 'next' : 'previous')
       return
     }
 
@@ -694,6 +792,46 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
                 placeholder="e.g., feat/LIN-123-fix-auth"
               />
             </Box>
+
+            {hasLinkedRepoOptions && (
+              <>
+                <Box marginTop={1} marginBottom={0}>
+                  <Text color={activeGitField === 'linkedRepos' ? POPUP_CONFIG.titleColor : 'white'}>
+                    {activeGitField === 'linkedRepos' ? '▶ ' : '  '}Linked nested repos ({selectedLinkedRepos.length}/{availableLinkedRepos.length})
+                  </Text>
+                </Box>
+                <Box
+                  width="100%"
+                  borderStyle={POPUP_CONFIG.inputBorderStyle}
+                  borderColor={activeGitField === 'linkedRepos' ? POPUP_CONFIG.inputBorderColor : 'gray'}
+                  paddingX={POPUP_CONFIG.inputPadding.x}
+                  paddingY={POPUP_CONFIG.inputPadding.y}
+                  flexDirection="column"
+                >
+                  <Box marginBottom={0}>
+                    <Text dimColor>
+                      Auto-detected child repos for this pane. Space toggles • A selects all • N clears all
+                    </Text>
+                  </Box>
+
+                  {availableLinkedRepos.map((relativePath, index) => {
+                    const isActive = activeGitField === 'linkedRepos' && index === selectedLinkedRepoIndex
+                    const isSelected = selectedLinkedRepos.includes(relativePath)
+                    return (
+                      <Box key={relativePath}>
+                        <Text
+                          color={isActive ? 'black' : undefined}
+                          backgroundColor={isActive ? 'cyan' : undefined}
+                          bold={isActive}
+                        >
+                          {isActive ? '▶ ' : '  '}{isSelected ? '[x]' : '[ ]'} {relativePath}
+                        </Text>
+                      </Box>
+                    )
+                  })}
+                </Box>
+              </>
+            )}
           </>
         )}
       </PopupContainer>

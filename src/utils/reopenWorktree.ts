@@ -21,7 +21,7 @@ import { ensureGeminiFolderTrusted } from './geminiTrust.js';
 import { SettingsManager } from './settingsManager.js';
 import { filterEnabledAgents, getInstalledAgents } from './agentDetection.js';
 import { getCurrentBranch } from './git.js';
-import { readWorktreeMetadata } from './worktreeMetadata.js';
+import { readWorktreeMetadata, writeWorktreeMetadata } from './worktreeMetadata.js';
 import {
   buildCodexHookedCommand,
   installCodexPaneHooks,
@@ -29,6 +29,7 @@ import {
 import { installClaudePaneHooks } from './claudeHooks.js';
 import { installGrokPaneHooks } from './grokHooks.js';
 import { resolveProjectColorTheme } from './paneColors.js';
+import { ensureWorkspaceWorktrees, getConfiguredLinkedRepoPaths } from './linkedWorktrees.js';
 import type { SidebarProject } from '../types.js';
 
 export interface ReopenWorktreeOptions {
@@ -64,6 +65,7 @@ export async function reopenWorktree(
   const paneProjectName = path.basename(projectRoot);
   const settings = new SettingsManager(projectRoot).getSettings();
   const metadata = readWorktreeMetadata(worktreePath);
+  const linkedRepoPaths = metadata?.linkedRepoPaths ?? getConfiguredLinkedRepoPaths(projectRoot);
   const sessionProjectRoot = optionsSessionProjectRoot
     || (optionsSessionConfigPath ? path.dirname(path.dirname(optionsSessionConfigPath)) : projectRoot);
 
@@ -161,6 +163,26 @@ export async function reopenWorktree(
   // Wait for CD to complete
   await new Promise((resolve) => setTimeout(resolve, 300));
 
+  const currentBranch = metadata?.branchName || getCurrentBranch(worktreePath);
+
+  const workspaceTargets = linkedRepoPaths.length > 0
+    ? await ensureWorkspaceWorktrees({
+        projectRoot,
+        rootWorktreePath: worktreePath,
+        branchName: currentBranch,
+        linkedRepoPaths,
+        fallbackStartPointMode: 'current-head',
+      })
+    : [];
+
+  for (const target of workspaceTargets) {
+    if (!target.isRoot && target.createdWorktree) {
+      writeWorktreeMetadata(target.worktreePath, {
+        branchName: currentBranch !== slug ? currentBranch : undefined,
+      });
+    }
+  }
+
   // Detect which agent to use - prefer stored metadata, then fall back to enabled/installed order.
   const installedAgents = await getInstalledAgents();
   const enabledAgents = filterEnabledAgents(installedAgents, settings.enabledAgents);
@@ -242,8 +264,6 @@ export async function reopenWorktree(
   await tmuxService.selectPane(paneInfo);
 
   // Create the pane object
-  const currentBranch = getCurrentBranch(worktreePath);
-
   const newPane: DmuxPane = {
     id: dmuxPaneId,
     slug,

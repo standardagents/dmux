@@ -13,6 +13,7 @@ import {
   SHIFT_MAX_PANE_WIDTH_STEP,
 } from '../constants/layout.js';
 import { isValidBranchName } from './git.js';
+import { normalizeLinkedRepoPathsSetting } from './linkedRepoConfig.js';
 import {
   getAgentDefinitions,
   getDefaultEnabledAgents,
@@ -135,6 +136,17 @@ function sanitizeLoadedSettings(value: unknown): DmuxSettings {
     && (parsed.branchPrefix === '' || isValidBranchName(parsed.branchPrefix))
   ) {
     sanitized.branchPrefix = parsed.branchPrefix;
+  }
+
+  if (typeof parsed.linkedRepoPaths === 'string') {
+    try {
+      const normalizedLinkedRepoPaths = normalizeLinkedRepoPathsSetting(parsed.linkedRepoPaths);
+      if (normalizedLinkedRepoPaths !== undefined) {
+        sanitized.linkedRepoPaths = normalizedLinkedRepoPaths;
+      }
+    } catch {
+      // Ignore invalid persisted linked repo settings.
+    }
   }
 
   if (isValidMinPaneWidth(parsed.minPaneWidth)) {
@@ -284,6 +296,10 @@ const LOCALIZED_SETTING_TRANSLATIONS: Partial<
     label: 'settings.promptForGitOptionsOnCreate',
     description: 'settings.promptForGitOptionsOnCreateDescription',
   },
+  linkedRepoPaths: {
+    label: 'settings.linkedRepoPaths',
+    description: 'settings.linkedRepoPathsDescription',
+  },
   minPaneWidth: {
     label: 'settings.minPaneWidth',
     description: 'settings.minPaneWidthDescription',
@@ -412,6 +428,13 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     label: 'Ask Git Options on Create',
     description: 'When enabled, new-pane popup asks for optional base branch and branch/worktree name overrides.',
     type: 'boolean',
+  },
+  {
+    key: 'linkedRepoPaths',
+    label: 'Linked Nested Repos',
+    description: 'Project-scoped relative repo paths (comma or newline separated) that should get matching worktrees in each pane.',
+    type: 'text',
+    scopeBehavior: 'project',
   },
   {
     key: 'minPaneWidth',
@@ -599,6 +622,9 @@ export class SettingsManager {
         throw new Error(`Invalid ${key}: contains characters not allowed in git branch names`);
       }
     }
+    if (key === 'linkedRepoPaths' && typeof value === 'string') {
+      value = normalizeLinkedRepoPathsSetting(value) as DmuxSettings[K];
+    }
     if (key === 'permissionMode' && typeof value === 'string' && !isPermissionMode(value)) {
       throw new Error(`Invalid permissionMode: "${value}"`);
     }
@@ -737,6 +763,9 @@ export class SettingsManager {
     }
     if (typeof settings.branchPrefix === 'string' && settings.branchPrefix !== '' && !isValidBranchName(settings.branchPrefix)) {
       throw new Error('Invalid branchPrefix: contains characters not allowed in git branch names');
+    }
+    if (typeof settings.linkedRepoPaths === 'string') {
+      settings.linkedRepoPaths = normalizeLinkedRepoPathsSetting(settings.linkedRepoPaths);
     }
     if (settings.minPaneWidth !== undefined && !isValidMinPaneWidth(settings.minPaneWidth)) {
       throw new Error(

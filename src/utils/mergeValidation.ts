@@ -7,6 +7,8 @@
 import { execSync } from 'child_process';
 import { LogService } from '../services/LogService.js';
 import { getCurrentBranch as getCurrentBranchUtil } from './git.js';
+import { normalizeLinkedRepoPathsArray, normalizeLinkedRepoPath } from './linkedRepoConfig.js';
+import { readWorktreeMetadata } from './worktreeMetadata.js';
 
 export interface MergeValidationResult {
   canMerge: boolean;
@@ -28,6 +30,10 @@ export interface GitStatus {
   summary: string;
 }
 
+export interface GitStatusOptions {
+  ignoredRelativePaths?: string[];
+}
+
 const DMUX_HOOK_SCAFFOLD_PATHS = new Set([
   '.dmux-hooks',
   '.dmux-hooks/',
@@ -36,6 +42,13 @@ const DMUX_HOOK_SCAFFOLD_PATHS = new Set([
   '.dmux-hooks/README.md',
   '.dmux-hooks/examples',
   '.dmux-hooks/examples/',
+]);
+
+const AGENT_STATE_SCAFFOLD_PATHS = new Set([
+  '.claude',
+  '.claude/',
+  '.codex',
+  '.codex/',
 ]);
 
 function parseGitStatusLine(line: string): { statusCode: string; filename: string } {
@@ -49,7 +62,47 @@ function parseGitStatusLine(line: string): { statusCode: string; filename: strin
   };
 }
 
-function shouldIgnoreGitStatusEntry(statusCode: string, filename: string): boolean {
+function normalizeGitStatusPath(filename: string): string {
+  return normalizeLinkedRepoPath(filename.replace(/\\/g, '/'));
+}
+
+function isIgnoredWorkspacePath(
+  filename: string,
+  ignoredRelativePaths: readonly string[]
+): boolean {
+  if (ignoredRelativePaths.length === 0) {
+    return false;
+  }
+
+  const normalizedFilename = normalizeGitStatusPath(filename);
+  if (!normalizedFilename) {
+    return false;
+  }
+
+  return ignoredRelativePaths.some((relativePath) => (
+    normalizedFilename === relativePath
+    || normalizedFilename.startsWith(`${relativePath}/`)
+  ));
+}
+
+function getIgnoredRelativePaths(
+  repoPath: string,
+  options?: GitStatusOptions
+): string[] {
+  const metadataPaths = readWorktreeMetadata(repoPath)?.linkedRepoPaths ?? [];
+  const explicitPaths = options?.ignoredRelativePaths ?? [];
+
+  return normalizeLinkedRepoPathsArray([
+    ...metadataPaths,
+    ...explicitPaths,
+  ]);
+}
+
+function shouldIgnoreGitStatusEntry(
+  statusCode: string,
+  filename: string,
+  ignoredRelativePaths: readonly string[]
+): boolean {
   if (
     filename === '.dmux'
     || filename === '.dmux/'
@@ -58,12 +111,19 @@ function shouldIgnoreGitStatusEntry(statusCode: string, filename: string): boole
     return true;
   }
 
+  if (isIgnoredWorkspacePath(filename, ignoredRelativePaths)) {
+    return true;
+  }
+
   if (statusCode !== '??') {
     return false;
   }
 
   return (
-    DMUX_HOOK_SCAFFOLD_PATHS.has(filename)
+    AGENT_STATE_SCAFFOLD_PATHS.has(filename)
+    || filename.startsWith('.claude/')
+    || filename.startsWith('.codex/')
+    || DMUX_HOOK_SCAFFOLD_PATHS.has(filename)
     || filename.startsWith('.dmux-hooks/examples/')
   );
 }
@@ -71,9 +131,10 @@ function shouldIgnoreGitStatusEntry(statusCode: string, filename: string): boole
 /**
  * Get git status for a repository
  */
-export function getGitStatus(repoPath: string): GitStatus {
+export function getGitStatus(repoPath: string, options: GitStatusOptions = {}): GitStatus {
   try {
     LogService.getInstance().info(`Getting git status for: ${repoPath}`, 'mergeValidation');
+    const ignoredRelativePaths = getIgnoredRelativePaths(repoPath, options);
     const statusOutput = execSync('git status --porcelain', {
       cwd: repoPath,
       encoding: 'utf-8',
@@ -95,7 +156,11 @@ export function getGitStatus(repoPath: string): GitStatus {
 
     const visibleEntries = entries
       .filter(({ statusCode, filename, line }) => {
-        const shouldIgnore = shouldIgnoreGitStatusEntry(statusCode, filename);
+        const shouldIgnore = shouldIgnoreGitStatusEntry(
+          statusCode,
+          filename,
+          ignoredRelativePaths
+        );
         if (shouldIgnore) {
           LogService.getInstance().info(
             `Ignoring git status entry: "${line}"`,
@@ -252,12 +317,15 @@ export function validateMerge(
   worktreeBranch: string
 ): MergeValidationResult {
   const issues: MergeIssue[] = [];
+  const linkedRepoPaths = readWorktreeMetadata(worktreePath)?.linkedRepoPaths ?? [];
 
   // Get current main branch
   const mainBranch = getCurrentBranch(mainRepoPath);
 
   // Check if main branch is clean
-  const mainStatus = getGitStatus(mainRepoPath);
+  const mainStatus = getGitStatus(mainRepoPath, {
+    ignoredRelativePaths: linkedRepoPaths,
+  });
   if (mainStatus.hasChanges) {
     issues.push({
       type: 'main_dirty',
@@ -268,7 +336,9 @@ export function validateMerge(
   }
 
   // Check if worktree has uncommitted changes
-  const worktreeStatus = getGitStatus(worktreePath);
+  const worktreeStatus = getGitStatus(worktreePath, {
+    ignoredRelativePaths: linkedRepoPaths,
+  });
   LogService.getInstance().info(
     `Worktree status: hasChanges=${worktreeStatus.hasChanges}, files=${JSON.stringify(worktreeStatus.files)}`,
     'mergeValidation'
