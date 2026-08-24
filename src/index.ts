@@ -1469,6 +1469,15 @@ class Dmux {
       process.emit('dmux-external-command-signal' as any);
     });
 
+    // Handle SIGUSR1, sent by the client-resized tmux hook set up in setupResizeHook().
+    // useLayoutManagement does the actual resize work, but it registers its listener inside
+    // an effect that unregisters on every dialog toggle. Without a permanent listener here,
+    // a resize arriving in that window hits the default action for SIGUSR1 — terminate —
+    // and kills the control pane. Node invokes every listener, so this is purely additive.
+    process.on('SIGUSR1', () => {
+      LogService.getInstance().debug('Received SIGUSR1 from tmux client-resized hook', 'ResizeDebug');
+    });
+
     // Handle uncaught exceptions and unhandled rejections
     process.on('uncaughtException', (error) => {
       console.error('Uncaught exception:', error);
