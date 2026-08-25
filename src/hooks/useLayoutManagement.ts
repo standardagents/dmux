@@ -93,15 +93,17 @@ export function useLayoutManagement({
     // Listen to stdout resize events
     process.stdout.on('resize', handleResize);
 
-    // Also listen for SIGWINCH and SIGUSR1 (tmux hook sends USR1)
-    process.on('SIGWINCH', handleResize);
-    process.on('SIGUSR1', handleResize);
+    // SIGWINCH and the tmux client-resized SIGUSR1 are handled at process scope
+    // in index.ts, which re-emits them as this event. Subscribing to the signals
+    // directly from here would be fatal: this effect re-runs on every dialog
+    // toggle, and once its cleanup removes the last listener for a signal Node
+    // restores the default disposition, which for SIGUSR1 is terminate.
+    process.on('dmux-resize-requested' as any, handleResize);
 
     return () => {
       isMountedRef.current = false;
       process.stdout.off('resize', handleResize);
-      process.off('SIGWINCH', handleResize);
-      process.off('SIGUSR1', handleResize);
+      process.off('dmux-resize-requested' as any, handleResize);
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current);
       }

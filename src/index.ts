@@ -1459,6 +1459,17 @@ class Dmux {
       cleanTerminalExit('SIGTERM');
     });
 
+    // Resize signals live here, not in useLayoutManagement: that hook re-runs on
+    // every dialog toggle, and once its cleanup removed the last listener Node
+    // restored the default disposition for SIGUSR1 — terminate — so a resize at
+    // the wrong moment killed the control pane.
+    const requestResize = () => {
+      process.emit('dmux-resize-requested' as any);
+    };
+    process.on('SIGWINCH', requestResize);
+    // Sent by the tmux client-resized hook installed in setupResizeHook().
+    process.on('SIGUSR1', requestResize);
+
     // Handle SIGUSR2 for pane split detection
     // This signal is sent by tmux hook when a new pane is created
     process.on('SIGUSR2', () => {
