@@ -1458,6 +1458,12 @@ class Dmux {
     process.on('SIGTERM', () => {
       cleanTerminalExit('SIGTERM');
     });
+    // Closing the terminal window sends SIGHUP. Without this the process dies on
+    // the default action, so the session keeps tmux hooks aimed at a PID that is
+    // about to be recycled, and the pane is left in mouse-reporting mode.
+    process.on('SIGHUP', () => {
+      cleanTerminalExit('SIGHUP');
+    });
 
     // Handle SIGUSR2 for pane split detection
     // This signal is sent by tmux hook when a new pane is created
