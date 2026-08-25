@@ -670,8 +670,20 @@ class Dmux {
       ...(mouseFilter ? { stdin: mouseFilter.stdin } : {}),
     });
 
-    // Clean shutdown on app exit
+    // Clean shutdown on app exit.
+    // exitOnCtrlC is false and the app handles Ctrl+C itself, so quitting that way
+    // unmounts Ink without ever raising SIGINT — the signal handler's teardown never
+    // runs. Repeat it here, or the session keeps tmux hooks aimed at a PID that is
+    // about to be recycled. claimProcessShutdown keeps the two paths exclusive.
     app.waitUntilExit().then(async () => {
+      if (process.env.TMUX && claimProcessShutdown('ink-exit')) {
+        this.cleanupResizeHook();
+        this.cleanupPaneSplitHook();
+        this.cleanupPaneFocusHook();
+        this.clearRemotePaneModeIndicators();
+        this.cleanupRemotePaneActionBindings();
+        this.cleanupSessionRuntimeMetadata();
+      }
       if (mouseFilter) {
         process.stdout.write(MOUSE_REPORTING_DISABLE);
         mouseFilter.detach();
