@@ -472,7 +472,11 @@ index abc123..def456 100644
     });
 
     it('should generate commit message from AI', async () => {
-      // Mock OpenRouter API
+      // callOpenRouter bails out before fetch when the key is absent, so without
+      // this the assertion silently measures the callClaudeCode fallback instead.
+      const previousKey = process.env.OPENROUTER_API_KEY;
+      process.env.OPENROUTER_API_KEY = 'test-key';
+
       global.fetch = vi.fn(() =>
         Promise.resolve({
           ok: true,
@@ -483,24 +487,43 @@ index abc123..def456 100644
         } as Response)
       );
 
-      const { generateCommitMessage } = await import('../../src/utils/aiMerge.js');
+      try {
+        const { generateCommitMessage } = await import('../../src/utils/aiMerge.js');
 
-      const message = await generateCommitMessage('diff content here', '/test');
+        const message = await generateCommitMessage('/test');
 
-      expect(message).toContain('feat:');
-      expect(message).toContain('authentication');
+        expect(message).toContain('feat:');
+        expect(message).toContain('authentication');
+      } finally {
+        if (previousKey === undefined) {
+          delete process.env.OPENROUTER_API_KEY;
+        } else {
+          process.env.OPENROUTER_API_KEY = previousKey;
+        }
+      }
     });
 
     it('should fallback to manual commit when AI fails', async () => {
+      const previousKey = process.env.OPENROUTER_API_KEY;
+      process.env.OPENROUTER_API_KEY = 'test-key';
+
       // Mock API failure
       global.fetch = vi.fn(() => Promise.reject(new Error('API timeout')));
 
-      const { generateCommitMessage } = await import('../../src/utils/aiMerge.js');
+      try {
+        const { generateCommitMessage } = await import('../../src/utils/aiMerge.js');
 
-      const message = await generateCommitMessage('diff content', '/test');
+        const message = await generateCommitMessage('/test');
 
-      // Should return a fallback message or empty string
-      expect(message).toBeDefined();
+        // Should return a fallback message or null
+        expect(message).toBeDefined();
+      } finally {
+        if (previousKey === undefined) {
+          delete process.env.OPENROUTER_API_KEY;
+        } else {
+          process.env.OPENROUTER_API_KEY = previousKey;
+        }
+      }
     });
   });
 
