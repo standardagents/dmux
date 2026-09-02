@@ -35,6 +35,7 @@ import {
 import { ensureTmuxRuntimeCompatibility } from './utils/tmuxRuntimeCompatibility.js';
 import { claimProcessShutdown } from './utils/processShutdown.js';
 import { buildDmuxCommand } from './utils/dmuxCommand.js';
+import { debugLog } from './utils/debugLog.js';
 import { sanitizePathForInstalledDmux } from './utils/pathEnvironment.js';
 import { attachTmuxSession, startDetachedTmuxSession } from './utils/tmuxSessionStart.js';
 import {
@@ -653,6 +654,7 @@ class Dmux {
     const mouseRowBaseline = mouseFilter ? getPaneHistorySize(controlPaneId) : 0;
 
     // Launch the Ink app
+    debugLog("index-render", { projectRoot: this.projectRoot, controlPaneId, inTmux: process.env.TMUX !== undefined })
     const appProps = {
       panesFile: this.panesFile,
       settingsFile: this.settingsFile,

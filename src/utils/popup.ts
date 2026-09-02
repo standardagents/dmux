@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { POPUP_CONFIG } from '../components/popups/config.js';
 import { TmuxService } from '../services/TmuxService.js';
+import { debugLog } from '../utils/debugLog.js';
 import type { PanePosition } from '../types.js';
 
 export interface PopupOptions {
@@ -669,15 +670,20 @@ export function supportsPopups(): boolean {
   try {
     const tmuxService = TmuxService.getInstance();
     const version = tmuxService.getVersionSync();
+    debugLog("supportsPopups", { version });
 
     // Extract version number (e.g., "tmux 3.2" -> "3.2")
     const match = version.match(/tmux (\d+\.\d+)/);
     if (match) {
       const versionNum = parseFloat(match[1]);
-      return versionNum >= 3.2;
+      const supported = versionNum >= 3.2;
+      debugLog("supportsPopups-result", { versionNum, supported });
+      return supported;
     }
+    debugLog("supportsPopups-no-match", { version });
     return false;
-  } catch {
+  } catch (error: any) {
+    debugLog("supportsPopups-error", { message: error?.message, stack: error?.stack });
     return false;
   }
 }

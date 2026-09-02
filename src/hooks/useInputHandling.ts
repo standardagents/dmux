@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
 import path from "path"
 import { useInput } from "ink"
+import { debugLog } from "../utils/debugLog.js"
 import type { DmuxPane, NewPaneInput, SidebarProject } from "../types.js"
 import type { TrackProjectActivity } from "../types/activity.js"
 import { StateManager } from "../shared/StateManager.js"
@@ -227,7 +228,9 @@ export function useInputHandling(params: UseInputHandlingParams) {
   }
 
   const handleCreateAgentPane = async (targetProjectRoot: string) => {
+    debugLog("handleCreateAgentPane-start", { targetProjectRoot })
     const paneInput = await popupManager.launchNewPanePopup(targetProjectRoot)
+    debugLog("handleCreateAgentPane-result", { paneInput })
     if (paneInput) {
       await handlePaneCreationWithAgent(paneInput, targetProjectRoot)
     }
@@ -1200,8 +1203,11 @@ export function useInputHandling(params: UseInputHandlingParams) {
   }
 
   useInput(async (input: string, key: any) => {
+    debugLog("keypress", { input, key: { escape: key.escape, return: key.return, ctrl: key.ctrl, meta: key.meta, shift: key.shift } })
+
     // Ignore input temporarily after popup operations (prevents buffered keys from being processed)
     if (ignoreInput) {
+      debugLog("keypress-ignored", { reason: "ignoreInput" })
       return
     }
 
@@ -1524,6 +1530,7 @@ export function useInputHandling(params: UseInputHandlingParams) {
       await handleRemoveProjectFromSidebar(getActiveProjectRoot())
       return
     } else if (!isLoading && input === "n") {
+      debugLog("n-handler", { isLoading, activeProjectRoot: getActiveProjectRoot() })
       await handleCreateAgentPane(getActiveProjectRoot())
       return
     } else if (!isLoading && input === "t") {

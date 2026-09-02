@@ -705,13 +705,36 @@ export const NewPanePopupApp: React.FC<{ resultFile: string }> = ({ resultFile }
 function main() {
   const resultFile = process.argv[2]
 
+  debugLog("[newPanePopup] main started", {
+    argv: process.argv.slice(2),
+    cwd: process.cwd(),
+    tmux: process.env.TMUX,
+    tty: process.stdin.isTTY,
+  })
+
   if (!resultFile) {
+    debugLog("[newPanePopup] abort", { reason: "missing resultFile" })
     console.error("Error: Result file path required")
     process.exit(1)
   }
 
-  render(<NewPanePopupApp resultFile={resultFile} />)
+  try {
+    render(<NewPanePopupApp resultFile={resultFile} />)
+  } catch (error: any) {
+    debugLog("[newPanePopup] render error", { message: error?.message, stack: error?.stack })
+    throw error
+  }
 }
+
+process.on("uncaughtException", (error) => {
+  debugLog("[newPanePopup] uncaughtException", { message: error?.message, stack: error?.stack })
+  process.exit(1)
+})
+
+process.on("unhandledRejection", (reason) => {
+  debugLog("[newPanePopup] unhandledRejection", { reason })
+  process.exit(1)
+})
 
 const entryPointHref = process.argv[1] ? pathToFileURL(process.argv[1]).href : ""
 if (import.meta.url === entryPointHref) {

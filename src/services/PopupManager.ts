@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
+import { debugLog } from "../utils/debugLog.js"
 import {
   launchNodePopupNonBlocking,
   POPUP_POSITIONING,
@@ -363,7 +364,11 @@ export class PopupManager {
     projectPath?: string,
     options: LaunchNewPanePopupOptions = {}
   ): Promise<NewPaneInput | null> {
-    if (!this.checkPopupSupport()) return null
+    debugLog("launchNewPanePopup-enter", { projectPath, options, popupsSupported: this.config.popupsSupported })
+    if (!this.checkPopupSupport()) {
+      debugLog("launchNewPanePopup-abort", { reason: "popupsNotSupported" })
+      return null
+    }
 
     try {
       const popupHeight = Math.floor(this.config.terminalHeight * 0.8)
@@ -377,6 +382,7 @@ export class PopupManager {
         settings.enableGoalModeByDefault ? "1" : "0",
       ]
       const projectName = effectivePath ? path.basename(effectivePath) : "dmux"
+      debugLog("launchNewPanePopup-args", { popupHeight, effectivePath, shouldPromptForGitOptions, popupArgs, terminalWidth: this.config.terminalWidth, terminalHeight: this.config.terminalHeight })
       const result = await this.launchPopup<unknown>(
         "newPanePopup.js",
         popupArgs,
@@ -389,11 +395,13 @@ export class PopupManager {
         undefined,
         projectPath
       )
+      debugLog("launchNewPanePopup-result", { result })
 
       this.ignoreInputBriefly()
       const data = this.handleResult(result)
       return this.normalizeNewPaneInput(data)
     } catch (error: any) {
+      debugLog("launchNewPanePopup-error", { message: error?.message, stack: error?.stack })
       this.showTempMessage(`Failed to launch popup: ${error.message}`)
       return null
     }

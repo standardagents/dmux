@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react"
 import { Box, Text, useApp, useStdout, useInput } from "ink"
 import stringWidth from "string-width"
+import { debugLog } from "./utils/debugLog.js"
 import { TmuxService } from "./services/TmuxService.js"
 
 // Hooks
@@ -113,7 +114,6 @@ import {
   PANE_TITLE_BUSY_FRAMES,
 } from "./utils/paneTitlePrefix.js"
 import { getPaneTmuxDisplayTitle } from "./utils/paneTitle.js"
-
 const DmuxApp: React.FC<DmuxAppProps> = ({
   panesFile,
   projectName,
@@ -125,6 +125,7 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
   mouseEvents,
   mouseRowBaseline,
 }) => {
+  debugLog("DmuxApp-mount", { projectName, projectRoot, controlPaneId })
   const { stdout } = useStdout()
   const terminalHeight = stdout?.rows || 40
   const isDevMode = process.env.DMUX_DEV === "true"
@@ -200,8 +201,8 @@ const DmuxApp: React.FC<DmuxAppProps> = ({
     ? footerTips[footerTipIndex]
     : undefined
 
-  // Popup support detection
-  const [popupsSupported, setPopupsSupported] = useState(false)
+  // Popup support detection (compute synchronously so PopupManager is created with the correct value)
+  const [popupsSupported, setPopupsSupported] = useState(() => supportsPopups())
 
   // Track terminal dimensions for responsive layout
   const terminalWidth = useTerminalWidth()
