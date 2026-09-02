@@ -3,7 +3,7 @@ export const meta = { title: 'Agents' };
 export function render() {
   return `
     <h1>Agents</h1>
-    <p class="lead">dmux supports 12 AI coding agents. Each agent is automatically detected if its CLI is installed and available in your PATH.</p>
+    <p class="lead">dmux supports 13 AI coding agents. Each agent is automatically detected if its CLI is installed and available in your PATH.</p>
 
     <h2>Agent Detection</h2>
     <p>dmux automatically detects installed agents by searching:</p>
@@ -21,7 +21,7 @@ export function render() {
     <p>When creating panes from the TUI, dmux opens the agent chooser so you can choose one or more runs per agent. If <code>defaultAgent</code> is set in <a href="#/configuration">configuration</a>, that agent is preselected at <code>1x</code>; otherwise the first available agent is preselected.</p>
 
     <h2>Enabling Agents</h2>
-    <p>Claude Code, OpenCode, Codex, and Grok Build are enabled by default. To use other agents, open settings by pressing <kbd>s</kbd> and toggle on the agents you want available in the agent selector.</p>
+    <p>Claude Code, OpenCode, Codex, Grok Build, and Kimi are enabled by default. To use other agents, open settings by pressing <kbd>s</kbd> and toggle on the agents you want available in the agent selector.</p>
 
     <h2>Default Agent</h2>
     <p>To preselect your usual agent in the chooser, set a default agent:</p>
@@ -56,6 +56,10 @@ export function render() {
     <h2>Grok Build Notes</h2>
     <p>Grok Build is detected as <code>grok</code>. dmux starts the interactive TUI and pastes the initial prompt into it so the pane remains usable after the first response. Reopened Grok panes use <code>grok --continue</code> from the worktree directory.</p>
     <p>dmux also installs lightweight Grok project hooks in <code>.grok/hooks/</code> for stop and notification events. Grok requires project hook trust before project hooks execute; open Grok's hooks UI with <code>/hooks</code> or run <code>/hooks-trust</code> inside the Grok session if needed.</p>
+
+    <h2>Kimi CLI Notes</h2>
+    <p>Kimi is detected as <code>kimi</code>. dmux starts the interactive session and pastes the initial prompt into it so the pane remains usable after the first response. Reopened Kimi panes use <code>kimi --continue</code> from the worktree directory.</p>
+    <p>Permission flags map to Kimi's modes: <code>--plan</code> for plan mode, <code>--yolo</code> for auto-approving regular tool calls, and <code>--auto</code> for fully autonomous mode.</p>
 
     <div class="callout callout-warning">
       <div class="callout-title">Caution</div>

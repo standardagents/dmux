@@ -24,6 +24,7 @@ export const AGENT_IDS = [
   'cursor',
   'copilot',
   'crush',
+  'kimi',
 ] as const;
 
 export type AgentName = typeof AGENT_IDS[number];
@@ -353,6 +354,34 @@ export const AGENT_REGISTRY: Readonly<Record<AgentName, AgentRegistryEntry>> = {
       bypassPermissions: '--yolo',
     },
     defaultEnabled: false,
+  },
+  kimi: {
+    id: 'kimi',
+    name: 'Kimi CLI',
+    shortLabel: 'km',
+    description: 'MoonshotAI Kimi Code CLI',
+    slugSuffix: 'kimi',
+    installTestCommand: 'command -v kimi 2>/dev/null || which kimi 2>/dev/null',
+    commonPaths: [
+      ...homePath('.kimi-code/bin/kimi'),
+      ...homePath('.local/bin/kimi'),
+      '/usr/local/bin/kimi',
+      '/opt/homebrew/bin/kimi',
+      '/usr/bin/kimi',
+      ...homePath('bin/kimi'),
+    ],
+    promptCommand: 'kimi',
+    promptTransport: 'send-keys',
+    sendKeysSubmit: ['Enter'],
+    sendKeysPostPasteDelayMs: 200,
+    sendKeysReadyDelayMs: 1200,
+    permissionFlags: {
+      plan: '--plan',
+      acceptEdits: '--yolo',
+      bypassPermissions: '--auto',
+    },
+    defaultEnabled: true,
+    resumeCommandTemplate: 'kimi --continue{permissions}',
   },
 };
 

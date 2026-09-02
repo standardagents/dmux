@@ -37,7 +37,13 @@ describe('agent launch utils', () => {
   });
 
   it('returns default-enabled registry agents', () => {
-    expect(getDefaultEnabledAgents()).toEqual(['claude', 'opencode', 'codex', 'grok']);
+    expect(getDefaultEnabledAgents()).toEqual([
+      'claude',
+      'opencode',
+      'codex',
+      'grok',
+      'kimi',
+    ]);
   });
 
   it('reports native goal-mode support for Claude and Codex only', () => {
@@ -171,6 +177,14 @@ describe('getPermissionFlags', () => {
     });
   });
 
+  describe('kimi', () => {
+    it('returns plan/accept/bypass permission flags', () => {
+      expect(getPermissionFlags('kimi', 'plan')).toBe('--plan');
+      expect(getPermissionFlags('kimi', 'acceptEdits')).toBe('--yolo');
+      expect(getPermissionFlags('kimi', 'bypassPermissions')).toBe('--auto');
+    });
+  });
+
   describe('qwen', () => {
     it('returns plan/accept/bypass permission flags', () => {
       expect(getPermissionFlags('qwen', 'plan')).toBe('--approval-mode plan');
@@ -243,6 +257,16 @@ describe('command builders', () => {
     expect(getSendKeysReadyDelayMs('grok')).toBe(1600);
   });
 
+  it('uses send-keys startup mode for kimi initial prompts', () => {
+    expect(getPromptTransport('kimi')).toBe('send-keys');
+    expect(buildInitialPromptCommand('kimi', '"fix it"', 'bypassPermissions')).toBe(
+      'kimi --auto'
+    );
+    expect(getSendKeysSubmit('kimi')).toEqual(['Enter']);
+    expect(getSendKeysPostPasteDelayMs('kimi')).toBe(200);
+    expect(getSendKeysReadyDelayMs('kimi')).toBe(1200);
+  });
+
   it('builds grok resume command scoped to the current directory', () => {
     expect(buildResumeCommand('grok', 'bypassPermissions')).toBe(
       'grok --continue --always-approve'
@@ -252,6 +276,12 @@ describe('command builders', () => {
   it('builds gemini resume command', () => {
     expect(buildResumeCommand('gemini', 'bypassPermissions')).toBe(
       'gemini --resume latest --approval-mode yolo'
+    );
+  });
+
+  it('builds kimi resume command', () => {
+    expect(buildResumeCommand('kimi', 'bypassPermissions')).toBe(
+      'kimi --continue --auto'
     );
   });
 
